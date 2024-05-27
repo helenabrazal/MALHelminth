@@ -1,0 +1,168 @@
+setwd("C:/MALHelminth project/Paper1/")
+
+# Packages
+{library(pacman)
+  p_load(scales, ggplot2, tidyverse, dplyr, ggpubr)}
+
+# Data
+mergeData <- read.csv("C:/MALHelminth project/Paper1/mergeData.csv")
+
+###make age categories based on epidemiological risk factors (school vs preschool children)
+
+table(mergeData$age_an)
+
+mergeData <- mergeData[!is.na(mergeData$age_an), ]
+
+mergeData <- mergeData %>%   
+  mutate(Age_cat = case_when(
+    age_an < 5 ~ " Preschool children (< 5)",
+    age_an > 4 ~ "School children(> 5)"  ))
+
+
+#########plot seroprevalences of single antigens##
+
+##create unique variable long format for plotting
+dataLong_pos <- mergeData%>% 
+  pivot_longer(cols = Cryptosporidium_pos:giardia_pos) %>% 
+  rename("pos" = "value", "Antigen"= "name")
+
+
+###plot seroprevalences by age###############
+
+#calculate seroprevalences and 95% CI
+unique(dataLong_pos$Age_cat)
+
+percentage_pos_age <- dataLong_pos %>%
+  group_by(Antigen, Age_cat) %>%
+  summarize(
+    prop_1 = mean(pos == 1) * 100,
+    lower_ci = binom.test(sum(pos == 1), length(pos))$conf.int[1] * 100,
+    upper_ci = binom.test(sum(pos == 1), length(pos))$conf.int[2] * 100
+  )
+
+write.csv(percentage_pos_age, "result_table.csv", row.names = FALSE)
+
+
+# Plot the percentages of seropositives by age
+plot <- ggplot(percentage_pos_age, aes(x = Antigen, y = prop_1, fill = Age_cat, label = sprintf("%.1f%%", prop_1))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
+  geom_text(position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
+  labs(title = "Percentage of Positive Cases by Antigen and Age Category",
+       x = "Antigen",
+       y = "Percentage of seropositive individuals") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(panel.background = element_blank()) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, 100)  # Set y-axis limits
+
+# Print the plot
+print(plot)
+
+
+#####plot MFI values#####
+
+dataLong <- mergeData %>%
+  pivot_longer(cols = Cryptosporidium_MFI:giardia_MFI)%>%
+  rename("MFI" = "value", "Antigen"= "name")
+
+dataLong$MFI<-as.numeric(dataLong$MFI)
+is.numeric(dataLong$MFI)
+
+##stratify MFIs by gender and age
+summary_data <- dataLong %>%
+  group_by(age_an, Sexe, Antigen) %>%
+  mutate(mean_MFI = mean(MFI))
+
+##make sure number of means make sense
+table(summary_data$mean_MFI)
+
+###plot progression of MFIs by Age
+
+age_plots <- ggplot(summary_data, aes(x = age_an, y=MFI)) +
+  geom_line(aes(y = mean_MFI, group=Sexe, color=Sexe), linewidth = 1, alpha = 1)+
+  scale_y_log10() +
+  facet_wrap(~ Antigen) +
+  theme(panel.background = element_blank()) +
+  ylab("Log10 Mean MFI") +
+  labs(x = "Age", y = "Log MFI") +
+  scale_x_continuous(breaks = c(0, 2, 4, 6, 8, 10, 12, 14)) +  # Specify breaks on x-axis
+  ggtitle("IgG antibody levels by gender accross age")
+age_plots
+
+####change age to discrete for box plots
+summary_data$Sexe <- factor(summary_data$Sexe)
+
+
+##plot by age groups iwth significance between gender groups and age
+age_plots <- ggplot(summary_data, aes(x = Age_cat, y = MFI, fill = Sexe)) +
+  geom_boxplot() +
+  scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  facet_wrap(~ Antigen) +
+  scale_x_discrete() +
+  scale_fill_brewer(palette = "Set3") +
+  theme(panel.background = element_blank(),
+        axis.text.x = element_text(face = "bold")) +
+  ylab("Log10 Mean MFI") +
+  labs(x = NULL, y = "Log MFI") +  # Remove x-axis title
+  ggtitle("IgG antibody levels by gender across age") +
+  stat_compare_means(aes(group = Age_cat), method = "t.test", label = "p.signif", vjust = 0.5,
+                     label.x = 1.5, 
+                     label.y = 7)+
+  stat_compare_means(aes(group = Sexe), method = "t.test", label = "p.signif", vjust = 0.5,
+                     position="identity") +
+  labs(fill = "Gender")  # Change legend title to "Gender"
+
+age_plots
+
+##stratify mean MFI by site and gender
+summary_data2 <- dataLong %>%
+  group_by(Site, Sexe, Antigen) %>%
+  mutate(mean_MFI = mean(MFI))
+
+##plot MFIs by Site and gender
+site_plots <- ggplot(summary_data2, aes(x = Sexe, y = MFI, fill = Site)) +
+  geom_boxplot() +
+  scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  facet_wrap(~ Antigen) +
+  scale_x_discrete() +
+  scale_fill_brewer(palette = "Set3") +
+  theme(panel.background = element_blank(),
+        axis.text.x = element_text(face = "bold")) +
+  ylab("Log10 Mean MFI") +
+  labs(x = NULL, y = "Log MFI") +  # Remove x-axis title
+  ggtitle("IgG antibody levels by gender across Sites") +
+  stat_compare_means(aes(group = Sexe), method = "t.test", label = "p.signif", vjust = 0.5,
+                     label.x = 1.5, 
+                     label.y = 7)+
+  stat_compare_means(aes(group = Site), method = "t.test", label = "p.signif", vjust = 0.5,
+                     position="identity") +
+  labs(fill = "Site")  # Change legend title to "Site"
+
+site_plots
+
+
+############create heatmaps with log MFI data distribution geographically
+# Filter out rows with "#N/A" in the "Site" variable
+epiData_filtered <- dataLong %>%
+  filter(mif_village != "#N/A")
+
+###calculate a mean MFI value stratified by Antigen and Village
+epiData_filtered <- epiData_filtered %>%
+  group_by(mif_village, Site, Antigen) %>%
+  mutate(mean_mfi = (mean(MFI)))
+# Arrange the data frame based on the 'Site' variable
+epiData_filtered <- epiData_filtered %>%
+  arrange(Site)
+# Create a new variable for the combined label of Site and Village
+epiData_filtered$Village_Label <- paste(epiData_filtered$Site, epiData_filtered$mif_village, sep = " - ")
+
+# Create the heatmap plot
+heatmap <- ggplot(epiData_filtered, aes(x = Antigen, y = Village_Label, fill = mean_mfi)) +
+  geom_tile() +
+  scale_fill_gradient(low = "yellow", high = "blue", trans = "log10") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Antigen", y = "Site - Village", fill = "Log Mean MFI") +
+  theme_minimal()
+heatmap
