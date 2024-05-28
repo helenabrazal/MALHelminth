@@ -20,16 +20,16 @@ mergeData <- mergeData %>%
 ###########################multiinfections#######################################
 ###now create a new variable with coinfections with pathogen from different sources (exposure to 1 or more pathogens from that category)
 mergeData_coinfections <- mergeData %>%
-mutate(Wash_coinf = ifelse(Cryptosporidium_pos + giardia_pos + taenia_pos+Schisto_pos +necator_pos + Strong_pos >= 1, 1, 0),
-Protozoan_coinf = ifelse(Cryptosporidium_pos + giardia_pos>= 1, 1, 0),
-STH_coinf = ifelse(necator_pos + Strong_pos >= 1, 1, 0),
-SCHISTO_coinf = ifelse(Schisto_pos >= 1, 1, 0),
-malaria_coinf = ifelse( malaria_his_pos + malaria_recent_pos>= 1, 1, 0))
+  mutate(Wash_coinf = ifelse(Cryptosporidium_pos + giardia_pos + taenia_pos+Schisto_pos +necator_pos + Strong_pos >= 1, 1, 0),
+         Protozoan_coinf = ifelse(Cryptosporidium_pos + giardia_pos>= 1, 1, 0),
+         STH_coinf = ifelse(necator_pos + Strong_pos >= 1, 1, 0),
+         SCHISTO_coinf = ifelse(Schisto_pos >= 1, 1, 0),
+         malaria_coinf = ifelse( malaria_his_pos + malaria_recent_pos>= 1, 1, 0))
 
 ##change to long format
 dataLong_infect <- mergeData_coinfections %>%
-pivot_longer(cols = Wash_coinf:malaria_coinf) %>%
-rename("infection" = "value", "inf_type"= "name")
+  pivot_longer(cols = Wash_coinf:malaria_coinf) %>%
+  rename("infection" = "value", "inf_type"= "name")
 
 ###########################multiinfections#######################################
 ####counts of historical infections vs counts of people 
@@ -54,28 +54,37 @@ ggplot(mergeData_coinfections, aes(x = number_infections)) +
 ###now create a new variable with coinfections with pathogen from different sources (if sum of both categories=2 there is a "coinfection")
 
 mergeData_coinfections <- mergeData_coinfections %>%
-mutate(Wash_malaria_coinf = ifelse(Wash_coinf + malaria_coinf >= 2, 1, 0),
-STH_malaria_coinf = ifelse(STH_coinf + malaria_coinf >= 2, 1, 0),
-Protozoan_malaria_coinf = ifelse(Protozoan_coinf + malaria_coinf >= 2, 1, 0),
-SCHISTO_malaria_coinf = ifelse(SCHISTO_coinf + malaria_coinf >= 2, 1, 0))
+  mutate(Wash_malaria_coinf = ifelse(Wash_coinf + malaria_coinf >= 2, 1, 0),
+         STH_malaria_coinf = ifelse(STH_coinf + malaria_coinf >= 2, 1, 0),
+         Protozoan_malaria_coinf = ifelse(Protozoan_coinf + malaria_coinf >= 2, 1, 0),
+         SCHISTO_malaria_coinf = ifelse(SCHISTO_coinf + malaria_coinf >= 2, 1, 0))
 
 write.csv(mergeData_coinfections, "C:/MALHelminth project/Paper1/mergeData_coinfections.csv", row.names = F)
 
 ##change to long format
 dataLong_pos <- mergeData_coinfections %>%
-pivot_longer(cols = Wash_malaria_coinf:SCHISTO_malaria_coinf) %>%
-rename("coinfections" = "value", "coinf_type"= "name")
+  pivot_longer(cols = Wash_malaria_coinf:SCHISTO_malaria_coinf) %>%
+  rename("coinfections" = "value", "coinf_type"= "name")
 
 unique(dataLong_pos$Age_cat)
 
+###change names for labels in the chart
+
+unique(dataLong_pos$coinf_type)
+
+dataLong_pos$coinf_type <- factor(dataLong_pos$coinf_type,
+                                  levels = c("Wash_malaria_coinf", "STH_malaria_coinf", "Protozoan_malaria_coinf", "SCHISTO_malaria_coinf"),
+                                  labels = c("Exposed malaria+WASH-related pathogens", "Exposed malaria+STH", "Exposed malaria+intestinal protozoa", "Exposed malaria+S. mansoni"))
+
+
 ###calculate percentage of coinfection types among total and 95% CI
 percentage_data_age <- dataLong_pos %>%
-group_by(coinf_type, Age_cat) %>%
-summarize(
-  percentage = mean(coinfections == 1) * 100,
-  lower_ci = binom.test(sum(coinfections == 1), length(coinfections))$conf.int[1] * 100,
-  upper_ci = binom.test(sum(coinfections == 1), length(coinfections))$conf.int[2] * 100
-)
+  group_by(coinf_type, Age_cat) %>%
+  summarize(
+    percentage = mean(coinfections == 1) * 100,
+    lower_ci = binom.test(sum(coinfections == 1), length(coinfections))$conf.int[1] * 100,
+    upper_ci = binom.test(sum(coinfections == 1), length(coinfections))$conf.int[2] * 100
+  )
 # Plot the percentages
 plot_coinf <- ggplot(percentage_data_age, aes(x = coinf_type, y = percentage, fill = Age_cat, label = sprintf("%.1f%%", percentage))) +
   geom_bar(stat = "identity", position = position_dodge()) +
@@ -94,141 +103,76 @@ plot_coinf <- ggplot(percentage_data_age, aes(x = coinf_type, y = percentage, fi
 print(plot_coinf)
 
 
-
-###edited radarchart function to enable labeling of values
-radarchart2 <- function(df, axistype=0, seg=4, pty=16, pcol=1:8, plty=1:6, plwd=1,
-                        pdensity=NULL, pangle=45, pfcol=NA, cglty=3, cglwd=1,
-                        cglcol="navy", axislabcol="blue", title="", maxmin=TRUE,
-                        na.itp=TRUE, centerzero=FALSE, vlabels=NULL, vlcex=NULL,
-                        caxislabels=NULL, calcex=NULL,
-                        paxislabels=NULL, palcex=NULL, ...) {
-  if (!is.data.frame(df)) { cat("The data must be given as dataframe.\n"); return() }
-  if ((n <- length(df))<3) { cat("The number of variables must be 3 or more.\n"); return() }
-  if (maxmin==FALSE) { # when the dataframe does not include max and min as the top 2 rows.
-    dfmax <- apply(df, 2, max)
-    dfmin <- apply(df, 2, min)
-    df <- rbind(dfmax, dfmin, df)
-  }
-  plot(c(-1.2, 1.2), c(-1.2, 1.2), type="n", frame.plot=FALSE, axes=FALSE, 
-       xlab="", ylab="", main=title, asp=1, ...) # define x-y coordinates without any plot
-  theta <- seq(90, 450, length=n+1)*pi/180
-  theta <- theta[1:n]
-  xx <- cos(theta)
-  yy <- sin(theta)
-  CGap <- ifelse(centerzero, 0, 1)
-  for (i in 0:seg) { # complementary guide lines, dotted navy line by default
-    polygon(xx*(i+CGap)/(seg+CGap), yy*(i+CGap)/(seg+CGap), lty=cglty, lwd=cglwd, border=cglcol)
-    if (axistype==1|axistype==3) CAXISLABELS <- paste(i/seg*100,"(%)")
-    if (axistype==4|axistype==5) CAXISLABELS <- sprintf("%3.2f",i/seg)
-    if (!is.null(caxislabels)&(i<length(caxislabels))) CAXISLABELS <- caxislabels[i+1]
-    if (axistype==1|axistype==3|axistype==4|axistype==5) {
-      if (is.null(calcex)) text(-0.05, (i+CGap)/(seg+CGap), CAXISLABELS, col=axislabcol) else
-        text(-0.05, (i+CGap)/(seg+CGap), CAXISLABELS, col=axislabcol, cex=calcex)
-    }
-  }
-  if (centerzero) {
-    arrows(0, 0, xx*1, yy*1, lwd=cglwd, lty=cglty, length=0, col=cglcol)
-  }
-  else {
-    arrows(xx/(seg+CGap), yy/(seg+CGap), xx*1, yy*1, lwd=cglwd, lty=cglty, length=0, col=cglcol)
-  }
-  PAXISLABELS <- df[1,1:n]
-  if (!is.null(paxislabels)) PAXISLABELS <- paxislabels
-  if (axistype==2|axistype==3|axistype==5) {
-    if (is.null(palcex)) text(xx[1:n], yy[1:n], PAXISLABELS, col=axislabcol) else
-      text(xx[1:n], yy[1:n], PAXISLABELS, col=axislabcol, cex=palcex)
-  }
-  VLABELS <- colnames(df)
-  if (!is.null(vlabels)) VLABELS <- vlabels
-  if (is.null(vlcex)) text(xx*1.2, yy*1.2, VLABELS) else
-    text(xx*1.2, yy*1.2, VLABELS, cex=vlcex)
-  series <- length(df[[1]])
-  SX <- series-2
-  if (length(pty) < SX) { ptys <- rep(pty, SX) } else { ptys <- pty }
-  if (length(pcol) < SX) { pcols <- rep(pcol, SX) } else { pcols <- pcol }
-  if (length(plty) < SX) { pltys <- rep(plty, SX) } else { pltys <- plty }
-  if (length(plwd) < SX) { plwds <- rep(plwd, SX) } else { plwds <- plwd }
-  if (length(pdensity) < SX) { pdensities <- rep(pdensity, SX) } else { pdensities <- pdensity }
-  if (length(pangle) < SX) { pangles <- rep(pangle, SX)} else { pangles <- pangle }
-  if (length(pfcol) < SX) { pfcols <- rep(pfcol, SX) } else { pfcols <- pfcol }
-  for (i in 3:series) {
-    xxs <- xx
-    yys <- yy
-    scale <- CGap/(seg+CGap)+(df[i,]-df[2,])/(df[1,]-df[2,])*seg/(seg+CGap)
-    if (sum(!is.na(df[i,]))<3) { cat(sprintf("[DATA NOT ENOUGH] at %d\n%g\n",i,df[i,])) # for too many NA's (1.2.2012)
-    } else {
-      for (j in 1:n) {
-        if (is.na(df[i, j])) { # how to treat NA
-          if (na.itp) { # treat NA using interpolation
-            left <- ifelse(j>1, j-1, n)
-            while (is.na(df[i, left])) {
-              left <- ifelse(left>1, left-1, n)
-            }
-            right <- ifelse(j<n, j+1, 1)
-            while (is.na(df[i, right])) {
-              right <- ifelse(right<n, right+1, 1)
-            }
-            xxleft <- xx[left]*CGap/(seg+CGap)+xx[left]*(df[i,left]-df[2,left])/(df[1,left]-df[2,left])*seg/(seg+CGap)
-            yyleft <- yy[left]*CGap/(seg+CGap)+yy[left]*(df[i,left]-df[2,left])/(df[1,left]-df[2,left])*seg/(seg+CGap)
-            xxright <- xx[right]*CGap/(seg+CGap)+xx[right]*(df[i,right]-df[2,right])/(df[1,right]-df[2,right])*seg/(seg+CGap)
-            yyright <- yy[right]*CGap/(seg+CGap)+yy[right]*(df[i,right]-df[2,right])/(df[1,right]-df[2,right])*seg/(seg+CGap)
-            if (xxleft > xxright) {
-              xxtmp <- xxleft; yytmp <- yyleft;
-              xxleft <- xxright; yyleft <- yyright;
-              xxright <- xxtmp; yyright <- yytmp;
-            }
-            xxs[j] <- xx[j]*(yyleft*xxright-yyright*xxleft)/(yy[j]*(xxright-xxleft)-xx[j]*(yyright-yyleft))
-            yys[j] <- (yy[j]/xx[j])*xxs[j]
-          } else { # treat NA as zero (origin)
-            xxs[j] <- 0
-            yys[j] <- 0
-          }
-        }
-        else {
-          xxs[j] <- xx[j]*CGap/(seg+CGap)+xx[j]*(df[i, j]-df[2, j])/(df[1, j]-df[2, j])*seg/(seg+CGap)
-          yys[j] <- yy[j]*CGap/(seg+CGap)+yy[j]*(df[i, j]-df[2, j])/(df[1, j]-df[2, j])*seg/(seg+CGap)
-        }
-      }
-      if (is.null(pdensities)) {
-        polygon(xxs, yys, lty=pltys[i-2], lwd=plwds[i-2], border=pcols[i-2], col=pfcols[i-2])
-      } else {
-        polygon(xxs, yys, lty=pltys[i-2], lwd=plwds[i-2], border=pcols[i-2], 
-                density=pdensities[i-2], angle=pangles[i-2], col=pfcols[i-2])
-      }
-      
-      ## Line modified to add only one text value to each point
-      text(xx*scale, yy*scale, labels = df[i,], cex = 1)
-    }
-  }
-}
-
-###calculate percentage of coinfection types among total (no CIs)
+# Calculate percentage of coinfection types among total (no CIs)
 percentage_data <- dataLong_pos %>%
   group_by(coinf_type, Age_cat) %>%
   summarize(
     percentage = round(mean(coinfections == 1) * 100, 2)
   )
 
-# Reshape the data(package fmsb assumes plotted values will be in columns)
+# Reshape the data (package fmsb assumes plotted values will be in columns)
 reshaped_data_age <- percentage_data %>%
-pivot_wider(names_from = coinf_type, values_from = percentage)
+  pivot_wider(names_from = coinf_type, values_from = percentage)
+
 # Add maximum and minimum values for each group as package also needs these values to calibrate the plot axes
-maximum <- 20
-minimum <- 0
-reshaped_data_age <- rbind(c(maximum, maximum), c(minimum, minimum), reshaped_data_age)
+num_columns <- ncol(reshaped_data_age) - 1  # Exclude the first column which is Age_cat
+max_row <- rep(20, num_columns)
+min_row <- rep(0, num_columns)
+
+# Add column names to max_row and min_row to match reshaped_data_age structure
+names(max_row) <- names(reshaped_data_age)[-1]
+names(min_row) <- names(reshaped_data_age)[-1]
+
+# Convert to data frame and add Age_cat column to match structure
+max_row <- c(Age_cat = "Max", as.list(max_row))
+min_row <- c(Age_cat = "Min", as.list(min_row))
+
+# Bind the rows
+reshaped_data_age <- bind_rows(max_row, min_row, reshaped_data_age)
+
 # Convert all values in the dataframe to numeric apart from first column with age categories
 data_age <- as.data.frame(sapply(reshaped_data_age[-1], as.numeric))
 rownames(data_age) <- reshaped_data_age[[1]]
-##Set up colors
-colors_border_age<-c(rgb(0.2,0.5,0.5,0.9),
-rgb(0.8,0.2,0.5,0.9),
-rgb(0.7,0.5,0.1,0.9))
-# Create the radar chart
-radarchart2(data_age, pcol=colors_border_age, plwd=4, plty=1,
-#custom the grid
-cglcol="grey", cglty=1, axislabcol="black",
-caxislabels = c(0,50))
-legend(x=1, y=1, legend = rownames(data_age[-c(1,2),]),
-bty ="n", pch=16, col=colors_border_age)
 
+# Set up colors
+colors_border_age <- c(rgb(0.2, 0.5, 0.5, 0.9),
+                       rgb(0.8, 0.2, 0.5, 0.9),
+                       rgb(0.7, 0.5, 0.1, 0.9))
 
+# Create the radar chart without automatic axis labels
+radarchart(data_age, axistype=0, pcol=colors_border_age, plwd=4, plty=1,
+           cglcol="grey", cglty=1, axislabcol="black", title="Coinfection Types by Age Category")
+
+# Add a legend
+legend(x=1, y=1, legend=rownames(data_age)[-c(1, 2)], bty="n", pch=16, col=colors_border_age, 
+       title="Age Categories")
+
+# Manually add grid labels at 0%, 5%, 10%, 15%, and 20% on four axes
+grid_labels <- c("0%", "5%", "10%", "15%", "20%")
+angles <- seq(0, 2*pi, length.out = 5)
+for (i in 1:5) {
+  x_pos <- cos(angles[1]) * (i/5)
+  y_pos <- sin(angles[1]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "black", cex = 0.75, pos = 4)
+  x_pos <- cos(angles[2]) * (i/5)
+  y_pos <- sin(angles[2]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "black", cex = 0.75, pos = 2)
+  x_pos <- cos(angles[3]) * (i/5)
+  y_pos <- sin(angles[3]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "black", cex = 0.75, pos = 4)
+  x_pos <- cos(angles[4]) * (i/5)
+  y_pos <- sin(angles[4]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "black", cex = 0.75, pos = 2)
+}
+
+# Adjust the position of the variable labels manually
+text_positions <- data.frame(
+  x = c(-2, 2, -2, 2),
+  y = c(-2, -2, 2, 2),
+  labels = c("Exposed malaria+WASH-related pathogens", "Exposed malaria+STH", 
+             "Exposed malaria+intestinal protozoa", "Exposed malaria+S. mansoni")
+)
+
+for (i in 1:nrow(text_positions)) {
+  text(text_positions$x[i], text_positions$y[i], labels = text_positions$labels[i], col = "black", cex = 0.75)
+}
