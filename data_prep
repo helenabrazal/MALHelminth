@@ -1,0 +1,59 @@
+# MALHelminth Project
+
+# Environment set up ------------------------------------------------------------------------------
+
+# Directory
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
+
+# Packages
+{library(pacman)
+p_load(fuzzyjoin, scales, gridExtra, RColorBrewer, ggcorrplot, GGally, sf, tidyverse)}
+
+# Data
+labData <- read.csv("data_combined_variables.csv", stringsAsFactors = F)
+epiData <- read.csv("MALHELMINTH_epi_data.csv", stringsAsFactors = F)
+
+`%ni%` <- Negate(`%in%`)
+
+# Data preparation --------------------------------------------------------------------------------
+
+# Remove control values if there
+labDataMod <- labData %>% filter(!grepl("Pf|NTD|neg|CP3|Background0|SCHISTO|pool", Sample))
+
+# Count distinct rows
+n_distinct(labDataMod$Sample) # 910 out of 914 distinct samples
+
+# Identify duplicates
+dups <- labDataMod %>% 
+  group_by(Sample) %>%
+  add_count() %>% 
+  filter(n == 2) %>% # 5 duplicates and 2 rows missing sample ID
+  ungroup()
+
+# Identify the value of Location for the duplicates with lowest malaria historical values (as they are the most immunogenic antigens) 
+# This value is unique and can be used to filter out these rows from labDataMod
+dups %>% 
+  group_by(Sample) %>%
+  filter(malaria_historical_MFI == min(malaria_historical_MFI)) %>% 
+  select(malaria_historical_MFI)
+
+# Remove duplicates with lowest DipTox from labDataMod
+labDataMod <- labDataMod %>%
+  mutate(toRemove = case_when(
+    Sample == "SABA-5501" & malaria_historical_MFI == 132. ~ "yes",
+    Sample == "MADI-7215" & malaria_historical_MFI == 63 ~ "yes",
+    Sample == "TAK-3094" & malaria_historical_MFI == 280 ~ "yes",
+    Sample == "KCH-7934" & malaria_historical_MFI ==  94.8 ~ "yes", 
+    Sample == "KCH-4552" & malaria_historical_MFI == 94.2 ~ "yes",
+    TRUE ~ "no")) %>% 
+  filter(toRemove == "no") %>% 
+  filter(Sample != "") # remove two rows missing sample ID
+
+# Merge epiData to labData 
+mergeData <- labDataMod %>% inner_join(epiData, by = "Sample")
+
+
+
+# Write .csv of prepped data to be used for further analysis 
+write.csv(mergeData, "mergeData.csv", row.names = F)
+
