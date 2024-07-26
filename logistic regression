@@ -1,0 +1,246 @@
+# MALHelminth Project
+
+# Prep environment ----------------------------------------------------------------------------------------
+
+# Directory
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
+
+# Packages
+{library(pacman)
+p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, tidymodels, dotwhisker, tidyverse)}
+
+# Read in full raw data to extract outcome data
+outcome_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData.csv", stringsAsFactors = F)
+
+# Read in epi covariates
+covariate_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/covariate_data_complete.csv", stringsAsFactors = F)
+
+
+# Bind outcome and covariate data
+coinfection_data <- outcome_data %>% 
+  left_join(covariate_data, by = "Sample")
+
+# Descriptive tables ---------------------------------------------------------------------------------------
+
+# Select coinfection variable and covariates
+desc_table <- coinfection_data %>% select(-c(1:18))
+
+# Create factored coinfection variable
+desc_table$coinf_level <- factor(desc_table$mal_helm_coinf, 
+                                 levels = c(0, 1),
+                                 labels = c("Yes", "No"))
+  
+
+desc_table %>% 
+  select(-c(mal_helm_coinf, id_consent)) %>% 
+  tbl_summary(by = coinf_level,
+              statistic = ~ "{n}/{N} ({p}%)",
+              missing = "no") %>% 
+  add_overall() %>%  
+  add_p() %>% 
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Coinfection status**") %>% 
+  modify_caption("**Table 1. Coinfected vs non coinfected participants**")
+
+# Univariate logistic regression ---------------------------------------------------------------------------
+
+# Create vector of covariates 
+uni_covariates <- names(covariate_data) 
+
+# Drop "Sample"
+uni_covariates <- setdiff(uni_covariates, "Sample")
+
+# Set the baseline level for 'age group' and 'time to water'
+coinfection_data <- coinfection_data %>% 
+  mutate(age_cat = fct_relevel(age_cat, "1-7yrs", after = 0),
+         time_to_water = fct_relevel(time_to_water, "<5_minutes", after = 0))
+
+# Loop a univariate models for each covariate
+univar_models <- uni_covariates %>% 
+  str_c("mal_helm_coinf ~ ", .) %>% # combine each variable into formula 
+  map(
+    .f = ~glm( # pass formulas above one-by-one to glm
+      formula = as.formula(.x), # specify formula
+      family = "binomial", # type of glm
+      data = coinfection_data, # data
+    )
+  ) %>% 
+  map(
+    .f = ~tidy(
+      .x,
+      exponentiate = TRUE, # exponentiate coefficients
+      conf.int = TRUE
+    )
+  ) %>% 
+  bind_rows() %>% # collapse list of outputs into single data frame
+  mutate(across(where(is.numeric), round, digits = 2))
+
+# Loop univariate models and add cross tabulation of responses
+univar_models_tab <- uni_covariates %>% 
+  map(
+    .f = ~{
+      coinfection_data %>% 
+        group_by(mal_helm_coinf) %>% # group by outcome
+        count(.data[[.x]]) %>% # add counts of outcome
+        pivot_wider(
+          names_from = mal_helm_coinf, 
+          values_from = n) %>% 
+        drop_na(.data[[.x]]) %>% 
+        rename("variable" = .x) %>% 
+        mutate(variable = as.character(variable))
+    }
+  ) %>% 
+  bind_rows() %>% # collapse list of count outputs into single data frame
+  bind_cols(., univar_models) %>% # bind regression outputs
+  select(term, 2:3, estimate, conf.low, conf.high, p.value) %>% 
+  mutate(across(where(is.numeric), round, digits = 2)) %>% 
+  rename_with(~str_to_title(.), everything()) %>% 
+  rename("Yes" = "0",
+         "No" = "1")
+
+# Regression table output
+univar_table <- flextable(univar_models_tab)
+
+# Formatting flextable
+univar_table <- color(univar_table, i = ~ P.value < 0.1, j = "P.value", color = "red")
+univar_table <- bold(univar_table, part = "header", bold = TRUE)
+
+univar_table <- add_header_row(univar_table, values = c("", "Coinfected", ""), colwidths = c(1,2,4))
+univar_table <- align(univar_table, part = "header", align = "center")
+univar_table <- theme_vanilla(univar_table)
+univar_table
+
+
+# Using p-value cut-off of 0.1 to select covariates for multivariate analysis
+multi_covariates <- univar_models_tab %>% filter(P.value <= 0.1) 
+
+multi_covariates <- c("age_cat", "child_sex", "study_site", # fixed covariates
+                      "house_material", "net_holes", "net_used", "toilet_type", "wash_hands",
+                      "water_contact","electricity", "radio", "space_between_walls",
+                      "hand_wash_area", "freq_wash_before_eat", "time_to_water")
+
+
+# Multivariable logistic regression ------------------------------------------------------------------------
+
+# Build multivariable model
+multivar_model <- multi_covariates %>% 
+  str_c(collapse = "+") %>% 
+  str_c("mal_helm_coinf ~ ", .) %>% 
+  glm(family = "binomial",
+      data = coinfection_data)
+
+# Select final multivariable model based on AIC using forward selection
+final_multivar_model <- multivar_model %>% 
+  stats::step(direction = "forward",
+              trace = FALSE)
+
+# Pass model output to tidy to exponentiate the log odds and CIs
+final_model_output <- final_multivar_model %>% 
+  broom::tidy(exponentiate = TRUE,
+              conf.int = TRUE) %>% 
+  mutate(across(where(is.numeric), round, digits = 2))
+ 
+
+# Model output table
+final_multivar_model %>% tbl_regression(exponentiate = T)
+
+
+# Linear regression ---------------------------------------------------------------------------
+
+# Using p-value cut-off of 0.1 to select covariates for multivariate analysis
+multi_covariates <- c("age_cat", "child_sex", "study_site", # fixed covariates
+                      "house_material", "net_holes", "net_used", "toilet_type", "wash_hands",
+                      "water_contact", "water_source","electricity", "radio", "space_between_walls",
+                      "hand_wash_area", "time_to_water")
+
+
+
+# Build multivariable model
+multivar_lin_model <- multi_covariates %>% 
+  str_c(collapse = "+") %>% 
+  str_c("Cryptosporidium_MFI ~ ", .) %>% 
+  lm(data = coinfection_data)
+
+# Select final multivariable model based on AIC using forward selection
+final_multivar_lin_model <- multivar_lin_model %>% 
+  stats::step(direction = "forward",
+              trace = FALSE)
+
+# Pass model output to tidy to exponentiate the log odds and CIs
+final_lin_model_output <- final_multivar_lin_model %>% 
+  broom::tidy(exponentiate = TRUE,
+              conf.int = TRUE) %>% 
+  mutate(across(where(is.numeric), round, digits = 2))
+
+
+# Model output table
+final_multivar_lin_model %>% tbl_regression()
+
+
+
+
+# Alt method -------------------------------------------------------------------------------------------------
+
+
+# Write vector of all newly coded covariates
+covariates <- c()
+
+
+test <- mergeData %>% 
+  select(PfAMA1_mEX, age_an, sexe_enfant, ethnique_enfant) %>% 
+  drop_na()
+
+
+model1 <- glm(PfAMA1_mEX ~ age_an + sexe_enfant + ethnique_enfant,
+              data = test,
+              family = binomial)
+
+# Look at model output
+anova(model1) 
+summary(model1) 
+
+
+# Tidymodels
+
+# recode covariates into sensible levels
+test <- test %>% 
+  mutate(
+    age_gp = case_when(
+      age_an <= 5 ~ 0,
+      age_an > 5 ~ 1,
+      TRUE ~ NA),
+    sexe_enfant = case_when(
+      sexe_enfant == 1 ~ 1,
+      sexe_enfant == 2 ~ 0,
+      TRUE ~ NA))
+
+# make variables a factor
+test$PfAMA1_mEX <- factor(test$PfAMA1_mEX, levels = c(0,1))
+#test$age_an <- factor(test$age_an, levels = c(0,1))
+#test$sexe_enfant <- factor(test$sexe_enfant, levels = c(0,1))
+test$ethnique_enfant <- factor(test$ethnique_enfant, levels = c(1,2,3,4,9))
+
+# specify model type 
+model <- logistic_reg() %>% set_engine("glm")
+
+# specify role of covariates
+rec <- recipe(PfAMA1_mEX ~ age_an + sexe_enfant + ethnique_enfant, data = test)
+
+# combine first two steps into model development workflow
+model_workflow <- workflow() %>% 
+  add_model(model) %>% 
+  add_recipe(rec)
+
+
+# fit model to the data
+model_fit <- model_workflow %>% 
+  fit(data = test)
+
+# examine relationship between outcome and predictors
+tidy(model_fit,
+     exponentiate = TRUE,
+     conf.int = TRUE)
+
+tidy(model_fit) %>% 
+  dwplot(dot_args = list(size = 2, color = "black"),
+         whisker_args = list(color = "black"),
+         vline = geom_vline(xintercept = 1, colour = "grey50", linetype = 2))
