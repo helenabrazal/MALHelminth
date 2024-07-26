@@ -1,0 +1,71 @@
+# Set working directory
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
+
+# Load packages
+library(pacman)
+p_load(ggplot2, tidyverse, dplyr, reshape2, Hmisc, cowplot)
+
+# Load data
+data <- read.csv("C:/MALHelminth project/Paper1/mergeData_coinfections.csv")
+
+###########Correlation matrix to see which ab levels correlate more
+# Change name of variables
+new_variable_names <- c(
+  cryptosporidium_MFI = "Cryptosporidium antibody levels",
+  giardia_MFI = "Giardia antibody levels",
+  taenia_MFI = "Taenia solium antibody levels",
+  Smansoni_MFI = "Schistosoma mansoni antibody levels",
+  necator_MFI = "Necator americanus antibody levels",
+  Strongyloides_MFI = "Strongyloides stercoralis antibody levels",
+  malaria_historical_MFI = "P. falciparum cumulative antibody levels",
+  malaria_recent_MFI = "P. falciparum recent antibody levels",
+  malaria_protect_MFI = "P. falciparum protective antibody levels"
+)
+
+# Select the relevant names for plotting
+selected_columns <- names(new_variable_names)
+data_subset <- data[selected_columns]
+
+# Rename the columns in the subset data frame
+colnames(data_subset) <- new_variable_names[selected_columns]
+
+# Calculate the Pearson correlation matrix and p-values
+correlation_test <- rcorr(as.matrix(data_subset), type = "pearson")
+cor_matrix <- correlation_test$r
+p_matrix <- correlation_test$P
+
+# Convert the correlation matrix and p-value matrix to long format
+cor_matrix_melted <- melt(cor_matrix, varnames = c("Var1", "Var2"))
+p_matrix_melted <- melt(p_matrix, varnames = c("Var1", "Var2"))
+
+# Merge the correlation and p-value data frames
+cor_p_combined <- merge(cor_matrix_melted, p_matrix_melted, by = c("Var1", "Var2"))
+names(cor_p_combined) <- c("Var1", "Var2", "Correlation", "p_value")
+
+# Plotting all correlations with an indication of significance
+plot_all <- ggplot(data = cor_p_combined, aes(Var1, Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(midpoint = 0, low = "steelblue", mid = "white", high = "darkred", limits = c(-1, 1)) +
+  geom_text(aes(label = ifelse(p_value < 0.05, "*", "")), color = "black", size = 5) +
+  theme_minimal() +
+  labs(title = "Pearson Correlation Matrix (All)", x = "Antibody levels", y = "Antibody levels") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  coord_fixed()
+
+# Filter for significant correlations (p < 0.05)
+significant_correlations <- cor_p_combined %>% filter(p_value < 0.05)
+
+# Plotting the significant correlations with ggplot2
+plot_significant <- ggplot(data = significant_correlations, aes(Var1, Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(midpoint = 0, low = "steelblue", mid = "white", high = "darkred", limits = c(-1, 1)) +
+  theme_minimal() +
+  labs(title = "Significant Pearson Correlation Matrix (p < 0.05)", x = "Antibody levels", y = "Antibody levels") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  coord_fixed()
+
+# Combine plots using cowplot
+combined_plot <- plot_grid(plot_all, plot_significant, labels = c("A", "B"), ncol = 2)
+
+# Save combined plot
+ggsave("combined_correlation_matrices.png", combined_plot, width = 14, height = 7, dpi = 300)
