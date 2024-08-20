@@ -2,54 +2,63 @@ setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 
 # Packages
 {library(pacman)
-  p_load(scales, ggplot2, tidyverse, dplyr, ggpubr)}
+  p_load(scales, ggplot2, tidyverse, dplyr, ggpubr, patchwork, scales,  reshape2, cowplot)}
 
 # Data
 mergeData <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData.csv")
 
 ###make age categories based on epidemiological risk factors (school vs preschool children)
 
-table(mergeData$age_an)
-
 mergeData <- mergeData[!is.na(mergeData$age_an), ]
+mergeData <- mergeData[!is.na(mergeData$Sexe), ]
 
 mergeData <- mergeData %>%   
   mutate(Age_category = case_when(
     age_an < 5 ~ " Preschool children (< 5)",
     age_an > 4 ~ "School children(> 5)"  ))
 
+mergeData <- mergeData %>%
+  mutate(Gender = case_when(
+    Sexe == "F" ~ "Female",
+    Sexe == "M" ~ "Male",
+  ))
+
 ## Rename variables before plotting
 mergeData <- mergeData %>%
-      rename(
-        "Gender" = Sexe,
-        "Cryptosporidium exposure" = cryptosporidium_pos,
-       "Malaria seroprotection" = malaria_protect_pos,
-       "Recent malaria exposure" = malaria_recent_pos,
-       "Strongyloides exposure" = Strongyloides_pos,
-        "Historical malaria exposure"= malaria_historical_pos,
-        "S.mansoni exposure" = Smansoni_pos,
-        "Necator exposure" = necator_pos,
-       "Taenia exposure" = taenia_pos,
-        "Giardia  exposure" = giardia_pos,
-       "Cryptosporidium" = cryptosporidium_MFI,
-       "Malaria protection" = malaria_protect_MFI,
-       "Recent malaria" = malaria_recent_MFI,
-       "Strongyloides" = Strongyloides_MFI,
-       "Historical malaria"= malaria_historical_MFI,
-       "S.mansoni" = Smansoni_MFI,
-       "Necator" = necator_MFI,
-       "Taenia" = taenia_MFI,
-       "Giardia" = giardia_MFI
-      )
-    
+  rename(
+    "C.parvum exposure" = cryptosporidium_pos,
+    "P. falciparum seroprotection" = malaria_protect_pos,
+    "Recent P. falciparum exposure" = malaria_recent_pos,
+    "S.stercoralis exposure" = Strongyloides_pos,
+    "Historical P. falciparum exposure"= malaria_historical_pos,
+    "S.mansoni exposure" = Smansoni_pos,
+    "N.americanus exposure" = necator_pos,
+    "T.solium exposure" = taenia_pos,
+    "G.lamblia  exposure" = giardia_pos,
+    "C.parvum" = cryptosporidium_MFI,
+    "P. falciparum protection" = malaria_protect_MFI,
+    "Recent P. falciparum" = malaria_recent_MFI,
+    "S.stercoralis" = Strongyloides_MFI,
+    "Historical P. falciparum"= malaria_historical_MFI,
+    "S.mansoni" = Smansoni_MFI,
+    "N.americanus" = necator_MFI,
+    "T.solium" = taenia_MFI,
+    "G.lamblia" = giardia_MFI
+  )
+
 
 #########plot seroprevalences of single antigens##
 
 ##create unique variable long format for plotting
 dataLong_pos <- mergeData%>% 
-  pivot_longer(cols = "Cryptosporidium exposure":"Giardia  exposure") %>% 
-  rename("pos" = "value", "Antigen"= "name")
+  pivot_longer(cols = "C.parvum exposure":"G.lamblia  exposure") %>% 
+  rename("pos" = "value", "Pathogen"= "name")
 
+
+dataLong_pos <- dataLong_pos %>%
+  filter(Age_category != "")%>%
+  filter(Gender != "")%>%
+  filter(Site != "")
 
 ###plot seroprevalences by age###############
 
@@ -57,158 +66,244 @@ dataLong_pos <- mergeData%>%
 unique(dataLong_pos$Age_category)
 
 percentage_pos_age <- dataLong_pos %>%
-  group_by(Antigen, Age_category) %>%
+  group_by(Pathogen, Age_category) %>%
   summarize(
     prop_1 = mean(pos == 1) * 100,
     lower_ci = binom.test(sum(pos == 1), length(pos))$conf.int[1] * 100,
     upper_ci = binom.test(sum(pos == 1), length(pos))$conf.int[2] * 100
   )
 
-write.csv(percentage_pos_age, "result_table.csv", row.names = FALSE)
 
+# Define original colors
+colors <- c("#339999", "#003333")
 
-# Define colour palette
-specific_colors <- c("#339999", "#003333") 
-specific_fill <- c("#33999955", "#00333355")
+# Create lighter versions by adjusting transparency (alpha)
+lighten_colors <- alpha(colors, alpha = 0.75)  # Adjust alpha to make the colors lighter
 
 # Plot the percentages of seropositives by age
-plot <- ggplot(percentage_pos_age, aes(x = Antigen, y = prop_1, fill = Age_category, label = sprintf("%.1f%%", prop_1))) +
+pos_age <- ggplot(percentage_pos_age, aes(x = Pathogen, y = prop_1, fill = Age_category, label = sprintf("%.1f%%", prop_1))) +
   geom_bar(stat = "identity", position = position_dodge()) +
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
-  geom_text(position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
-  labs(title = "Percentage of seropotive cases by age category",
+  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 2.5) +
+  labs(title = "Percentage of seropositive cases by age category",
        y = "Percentage of seropositive individuals") +
-  scale_color_manual(values=c("#339999", "#003333"))+
-  scale_fill_manual(values=c("#339999", "#003333"))+
+  scale_color_manual(values = lighten_colors) +
+  scale_fill_manual(values = lighten_colors) +
   theme(panel.background = element_blank()) +
-  theme_minimal() +
-  theme(axis.title.x = element_blank())+
   theme_classic()+
+  theme(axis.title.x = element_blank())+
   theme(axis.text.x = element_text(face="bold", angle = 45, hjust = 1)) +
   ylim(0, 100)  # Set y-axis limits
 
 # Print the plot
-print(plot)
+print(pos_age)
+
+###plot seroprevalences by gender###############
+
+#calculate seroprevalences and 95% CI
+unique(dataLong_pos$Gender)
 
 
-#####plot MFI values#####
+percentage_pos_gender <- dataLong_pos %>%
+  group_by(Pathogen, Gender) %>%
+  summarize(
+    prop_1 = mean(pos == 1) * 100,
+    lower_ci = binom.test(sum(pos == 1), length(pos))$conf.int[1] * 100,
+    upper_ci = binom.test(sum(pos == 1), length(pos))$conf.int[2] * 100
+  )
+
+## Plot the percentages of seropositives by gender
+
+pos_gender <- ggplot(percentage_pos_gender, aes(x = Pathogen, y = prop_1, fill = Gender, label = sprintf("%.1f%%", prop_1))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
+  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 2.5) +
+  labs(title = "Percentage of seropositive cases by gender assigned at birth",
+       y = "Percentage of seropositive individuals") +
+  scale_color_manual(values = lighten_colors) +
+  scale_fill_manual(values = lighten_colors) +
+  theme(panel.background = element_blank()) +
+  theme_classic()+
+  theme(axis.title.x = element_blank())+
+  theme(axis.text.x = element_text(face="bold", angle = 45, hjust = 1)) +
+  ylim(0, 100)  # Set y-axis limits
+
+# Print the plot
+print(pos_gender)
+
+###plot seroprevalences by Site###############
+
+#calculate seroprevalences and 95% CI
+unique(dataLong_pos$Site)
+
+percentage_pos_site <- dataLong_pos %>%
+  group_by(Pathogen, Site) %>%
+  summarize(
+    prop_1 = mean(pos == 1) * 100,
+    lower_ci = binom.test(sum(pos == 1), length(pos))$conf.int[1] * 100,
+    upper_ci = binom.test(sum(pos == 1), length(pos))$conf.int[2] * 100
+  )
+
+
+## Plot the percentages of seropositives by site
+
+pos_site <- ggplot(percentage_pos_site, aes(x = Pathogen, y = prop_1, fill = Site, label = sprintf("%.1f%%", prop_1))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
+  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 2.5) +
+  labs(title = "Percentage of seropositive cases by site",
+       y = "Percentage of seropositive individuals",
+       x = NULL) +
+  scale_color_manual(values = lighten_colors) +
+  scale_fill_manual(values = lighten_colors) +
+  theme(panel.background = element_blank()) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank()) +
+  theme(axis.text.x = element_text(face = "bold", angle = 45, hjust = 1)) +
+  ylim(0, 100)  # Set y-axis limits
+
+# Print the plot
+print(pos_site)
+
+#combine plots ensuring 3 plots in 2 rows
+
+pos_age + pos_gender + pos_site +  plot_layout(nrow = 2, byrow = FALSE)
+
+##### Plot MFI Values #####
+  pivot_longer(cols = "Cp17":"VSP3", names_to = "Antigen", values_to = "MFI") %>%
+  filter(!is.na(Site) & Site != "" & !is.na(Gender) & Gender != "") %>%
+  mutate(MFI = as.numeric(MFI))
+
+# Transform data
 dataLong <- mergeData %>%
-  pivot_longer(cols = "Cryptosporidium":"Giardia")%>%
-  rename("MFI" = "value", "Antigen"= "name")
 
-dataLong$MFI<-as.numeric(dataLong$MFI)
-is.numeric(dataLong$MFI)
+dataLong_summ <- mergeData %>%
+  pivot_longer(cols = "C.parvum":"G.lamblia", names_to = "Pathogen", values_to = "MFI_sum") %>%
+  filter(!is.na(Site) & Site != "" & !is.na(Gender) & Gender != "") %>%
+  mutate(MFI_sum = as.numeric(MFI_sum))
 
-##Remove "Site" and "Gender" missing values
-dataLong <- dataLong[!is.na(dataLong$Site) & dataLong$Site != "", ]
-dataLong <- dataLong[!is.na(dataLong$Gender) & dataLong$Gender != "", ]
+# Define plot function
+plot_mfi <- function(data, fill_var, title) {
+  ggplot(data, aes(x = Site, y = MFI_sum, fill = !!sym(fill_var))) +
+    geom_boxplot() +
+    scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    facet_wrap(~ Pathogen) +
+    scale_fill_manual(values = c("#33999955", "#00333355")) +
+    theme(
+      panel.background = element_blank(), 
+      axis.text.x = element_text(face = "bold", angle = 45, hjust = 1)
+    ) +
+    ylab("Log10 Mean MFI") +
+    labs(x = NULL, y = "Log MFI", title = title) +
+    stat_compare_means(aes(group = !!sym(fill_var)), method = "t.test", label = "p.signif", vjust = 0.5, label.x = 1.5, label.y = 7) +
+    labs(fill = fill_var)
+}
 
-##stratify MFIs by gender and age
-summary_data <- dataLong %>%
-  group_by(Age_category, Gender, Antigen) %>%
-  mutate(mean_MFI = mean(MFI))
+# Generate plots
+age_plots <- plot_mfi(dataLong_summ, "Age_category", "IgG antibody levels by age across sites")
+gender_plots <- plot_mfi(dataLong_summ, "Gender", "IgG antibody levels by gender assigned at birth across sites")
 
-##make sure number of means make sense
-table(summary_data$mean_MFI)
+print(age_plots)
+print(gender_plots)
+
+# Combine plots
+age_plots + gender_plots + plot_layout(nrow = 2, byrow = FALSE)
+
+# Define violin plot function
+plot_violin <- function(data, x_var, fill_var, title) {
+  ggplot(data, aes(x = Pathogen, y = MFI_sum, fill = !!sym(fill_var))) +
+    geom_violin(position = position_dodge(width = 0.7)) +
+    geom_boxplot(width = 0.2, position = position_dodge(width = 0.6)) +
+    scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+    scale_fill_manual(values = c("#33999955", "#00333355")) +
+    theme(panel.background = element_blank(), axis.text.x = element_text(face = "bold", angle = 45, hjust = 1)) +
+    ylab("Log10 MFI") +
+    labs(x = "IgG levels", y = "Log MFI", title = title) +
+    stat_compare_means(aes(group = !!sym(fill_var)), method = "t.test", label = "p.signif", vjust = 0.5, position = "identity") +
+    labs(fill = paste0(fill_var, " group"))
+}
+
+# Generate violin plots
+age_violin <- plot_violin(dataLong_summ, "Age_category", "Age_category", "IgG antibody levels by age group")
+gender_violin <- plot_violin(dataLong_summ, "Gender", "Gender", "IgG antibody levels by gender assigned at birth")
+site_violin <- plot_violin(dataLong_summ, "Site", "Site", "IgG antibody levels by site")
+
+# Combine plots
+age_violin + gender_violin + site_violin+plot_layout(nrow = 3, byrow = FALSE)
 
 
-##change sex to discrete for box plots
-summary_data$Gender <- factor(summary_data$Gender)
-
-
-##plot by sex groups with significance between gender groups and age
-age_plots <- ggplot(summary_data, aes(x = Age_category, y = MFI, fill = Gender)) +
-  geom_boxplot() +
-  scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-  facet_wrap(~ Antigen) +
-  scale_x_discrete() +
-  scale_color_manual(values=c("#339999", "#003333"))+
-  scale_fill_manual(values=c("#33999955", "#00333355"))+
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(face = "bold")) +
-  ylab("Log10 Mean MFI") +
-  labs(x = NULL, y = "Log MFI") +  # Remove x-axis title
-  ggtitle("IgG antibody levels by gender across age") +
-  stat_compare_means(aes(group = Age_cat), method = "t.test", label = "p.signif", vjust = 0.5,
-                     label.x = 1.5, 
-                     label.y = 7)+
-  stat_compare_means(aes(group = Gender), method = "t.test", label = "p.signif", vjust = 0.5,
-                     position="identity") +
-  labs(fill = "Gender")  # Change legend title to "Gender"
-
-age_plots
-
-##stratify mean MFI by site and gender
-summary_data2 <- dataLong %>%
-  group_by(Site, Gender, Antigen) %>%
-  mutate(mean_MFI = mean(MFI))
-
-##plot MFIs by Site to se differences
-site_plots <- ggplot(summary_data2, aes(x = Gender, y = MFI, fill = Site)) +
-  geom_boxplot() +
-  scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-  facet_wrap(~ Antigen) +
-  scale_x_discrete() +
-  scale_fill_brewer(palette = "Set3") +
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(face = "bold")) +
-  ylab("Log10 Mean MFI") +
-  labs(x = NULL, y = "Log MFI") +  # Remove x-axis title
-  ggtitle("IgG antibody levels by gender across Sites") +
-  stat_compare_means(aes(group = Gender), method = "t.test", label = "p.signif", vjust = 0.5,
-                     label.x = 1.5, 
-                     label.y = 7)+
-  stat_compare_means(aes(group = Site), method = "t.test", label = "p.signif", vjust = 0.5,
-                     position="identity") +
-  labs(fill = "Site")  # Change legend title to "Site"
-
-site_plots
-
-###Now only plot violin plots with MFIs by Site
-#calculate SD and 95% CI
-
-#plot
-site_violin <- dataLong%>%
-  group_by(Antigen,Site)%>%
-  ggplot(aes(x = Antigen, y=MFI, colour = Site, fill=Site)) +
-  geom_violin(position = position_dodge(width = 0.7)) +
-  geom_boxplot(width = 0.2, position = position_dodge(width = 0.6)) +
-  scale_color_manual(values=c("#339999", "#003333"))+
-  scale_fill_manual(values=c("#33999955", "#00333355"))+
-  scale_y_log10(labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-  scale_x_discrete() +
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(face = "bold")) +
-  ylab("Log10  MFI") +
-  labs(x = "IgG levels", y = "Log MFI") +  # Remove x-axis title
-  ggtitle("IgG antibody levels by gender across Sites") +
-  stat_compare_means(aes(group = Site), method = "t.test", label = "p.signif", vjust = 0.5,
-                     position="identity") +
-  labs(fill = "Site")  # Change legend title to "Site"
-
-site_violin
 ############create heatmaps with log MFI data distribution geographically
 # Filter out rows with "#N/A" in the "Site" variable
-epiData_filtered <- dataLong %>%
+# Filter out data
+epiData_filtered <- dataLong_summ %>%
   filter(mif_village != "#N/A")
 
-#rename values of Antigen to make sure they fit in heatmap
-
-###calculate a mean MFI value stratified by Antigen and Village
+# Calculate mean MFI value
 epiData_filtered <- epiData_filtered %>%
-  group_by(mif_village, Site, Antigen) %>%
-  mutate(mean_mfi = (mean(MFI)))
-# Arrange the data frame based on the 'Site' variable
-epiData_filtered <- epiData_filtered %>%
+  group_by(mif_village, Site, Pathogen) %>%
+  mutate(mean_mfi = mean(MFI_sum)) %>%
   arrange(Site)
-# Create a new variable for the combined label of Site and Village
-epiData_filtered$Village_Label <- paste(epiData_filtered$Site, epiData_filtered$mif_village, sep = " - ")
 
-# Create the heatmap plot
-heatmap <- ggplot(epiData_filtered, aes(x = Antigen, y = Village_Label, fill = mean_mfi)) +
+# Create combined label
+epiData_filtered <- epiData_filtered %>%
+  mutate(Village_Label = paste(Site, mif_village, sep = " - "))
+
+# Create heatmap plot
+heatmap <- ggplot(epiData_filtered, aes(x = Pathogen, y = Village_Label, fill = mean_mfi)) +
   geom_tile() +
-  scale_fill_gradient(low = "yellow", high = "blue", trans = "log10") +
+  scale_fill_gradient(low = "yellow", high = "blue", trans = "log10", 
+                      name = "Log Mean MFI",
+                      labels = scales::label_number(scale = 1, accuracy = 0.01)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(x = "Antibody levels", y = "Site - Village", fill = "Log Mean MFI") +
+  labs(x = "Antibody levels", y = "Site - Village") +
   theme_minimal()
-heatmap
+
+# Print the heatmap
+print(heatmap)
+
+###########Correlation matrix to see which ab levels correlate more
+
+library(Hmisc)
+# Select the relevant columns for plotting
+data_subset <- mergeData %>% select(28:35)
+
+# Calculate the Pearson correlation matrix and p-values
+correlation_test <- rcorr(as.matrix(data_subset), type = "pearson")
+cor_matrix <- correlation_test$r
+p_matrix <- correlation_test$P
+
+# Convert the correlation matrix and p-value matrix to long format
+cor_matrix_melted <- melt(cor_matrix, varnames = c("Var1", "Var2"))
+p_matrix_melted <- melt(p_matrix, varnames = c("Var1", "Var2"))
+
+# Merge the correlation and p-value data frames
+cor_p_combined <- merge(cor_matrix_melted, p_matrix_melted, by = c("Var1", "Var2"))
+names(cor_p_combined) <- c("Var1", "Var2", "Correlation", "p_value")
+
+# Plotting all correlations with an indication of significance
+plot_all <- ggplot(data = cor_p_combined, aes(Var1, Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(midpoint = 0, low = "steelblue", mid = "white", high = "darkred", limits = c(-1, 1)) +
+  geom_text(aes(label = ifelse(p_value < 0.05, "*", "")), color = "black", size = 5) +
+  theme_minimal() +
+  labs(title = "Pearson Correlation Matrix (All)", x = "Antibody levels", y = "Antibody levels") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  coord_fixed()
+
+# Filter for significant correlations (p < 0.05)
+significant_correlations <- cor_p_combined %>% filter(p_value < 0.05)
+
+# Plotting the significant correlations with ggplot2
+plot_significant <- ggplot(data = significant_correlations, aes(Var1, Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(midpoint = 0, low = "steelblue", mid = "white", high = "darkred", limits = c(-1, 1)) +
+  theme_minimal() +
+  labs(title = "Significant Pearson Correlation Matrix (p < 0.05)", x = "Antibody levels", y = "Antibody levels") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  coord_fixed()
+
+# Combine plots using cowplot
+combined_plot <- plot_grid(plot_all, plot_significant, labels = c("A", "B"), ncol = 2)
+
+# Save combined plot
+ggsave("combined_correlation_matrices.png", combined_plot, width = 14, height = 7, dpi = 300)
