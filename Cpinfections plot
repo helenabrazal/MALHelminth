@@ -1,11 +1,11 @@
-setwd("C:/MALHelminth project/Paper1/")
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 
 # Packages
 {library(pacman)
   p_load(scales, ggplot2, tidyverse, dplyr, fmsb)}
 
 # Data
-mergeData <- read.csv("C:/MALHelminth project/Paper1/mergeData.csv")
+mergeData <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData.csv")
 
 ###make age categories based on epidemiological risk factors (school vs preschool children)
 
@@ -17,14 +17,23 @@ mergeData <- mergeData %>%
   mutate(Age_cat = case_when(
     age_an < 5 ~ " Preschool children (< 5)",
     age_an > 4 ~ "School children(> 5)"  ))
-###########################multiinfections#######################################
-###now create a new variable with coinfections with pathogen from different sources (exposure to 1 or more pathogens from that category)
+
+###########################monoinfections#######################################
+###now create a new variable with infections with pathogen from same sources (exposure to 1 or more pathogens from that category)
 mergeData_coinfections <- mergeData %>%
-  mutate(Wash_coinf = ifelse(Cryptosporidium_pos + giardia_pos + taenia_pos+Schisto_pos +necator_pos + Strong_pos >= 1, 1, 0),
-         Protozoan_coinf = ifelse(Cryptosporidium_pos + giardia_pos>= 1, 1, 0),
-         STH_coinf = ifelse(necator_pos + Strong_pos >= 1, 1, 0),
-         SCHISTO_coinf = ifelse(Schisto_pos >= 1, 1, 0),
-         malaria_coinf = ifelse( malaria_his_pos + malaria_recent_pos>= 1, 1, 0))
+  mutate(Wash = ifelse(cryptosporidium_pos + giardia_pos + taenia_pos+Smansoni_pos +necator_pos + Strongyloides_pos >= 1, 1, 0),
+         Protozoan = ifelse(cryptosporidium_pos + giardia_pos>= 1, 1, 0),
+         STH = ifelse(necator_pos + Strongyloides_pos >= 1, 1, 0),
+         SCHISTO = ifelse(Smansoni_pos >= 1, 1, 0),
+         malaria = ifelse( malaria_historical_pos + malaria_recent_pos + malaria_protect_pos>= 1, 1, 0))
+
+###now create a new variable with coinfections with pathogen from same sources (exposure to 2 or more pathogens from that category)
+mergeData_coinfections <- mergeData_coinfections %>%
+  mutate(Wash_coinf = ifelse(cryptosporidium_pos + giardia_pos + taenia_pos+Smansoni_pos +necator_pos + Strongyloides_pos >= 2, 2, 0),
+         Protozoan_coinf = ifelse(cryptosporidium_pos + giardia_pos>= 2, 2, 0),
+         STH_coinf = ifelse(necator_pos + Strongyloides_pos >= 2, 2, 0),
+         SCHISTO_coinf = ifelse(Smansoni_pos >= 2, 2, 0),
+         malaria_coinf = ifelse( malaria_historical_pos + malaria_recent_pos + malaria_protect_pos>= 2, 2, 0))
 
 ##change to long format
 dataLong_infect <- mergeData_coinfections %>%
@@ -32,19 +41,18 @@ dataLong_infect <- mergeData_coinfections %>%
   rename("infection" = "value", "inf_type"= "name")
 
 ###########################multiinfections#######################################
-####counts of historical infections vs counts of people 
-
-
+####counts of sum of historical infections from different sources vs counts of people 
 mergeData_coinfections <- mergeData_coinfections %>%
-  mutate(number_infections = Wash_coinf + Protozoan_coinf + STH_coinf + SCHISTO_coinf + malaria_coinf)
+  mutate(number_infections = Wash + Protozoan + STH + SCHISTO + malaria)
+
 
 ggplot(mergeData_coinfections, aes(x = number_infections)) +
   # Create a histogram with count on y-axis
-  geom_histogram(stat = "count", fill = "skyblue", color = "black") +
+  geom_histogram(stat = "count", fill = "sky blue", color = "black") +
   # Add text labels for counts on top of bars
   geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +
   # Add labels and title
-  labs(x = "Number of Infections from different pathogen types", y = "Count", title = "Distribution of Number of Infections") +
+  labs(x = "Number of historical infections with different pathogen types", y = "Count", title = "Count of participants by number of historical infections") +
   # Customize theme
   theme_minimal() +
   # Explicitly include breaks for numbers 1 to 6 on the x-axis
@@ -54,12 +62,12 @@ ggplot(mergeData_coinfections, aes(x = number_infections)) +
 ###now create a new variable with coinfections with pathogen from different sources (if sum of both categories=2 there is a "coinfection")
 
 mergeData_coinfections <- mergeData_coinfections %>%
-  mutate(Wash_malaria_coinf = ifelse(Wash_coinf + malaria_coinf >= 2, 1, 0),
-         STH_malaria_coinf = ifelse(STH_coinf + malaria_coinf >= 2, 1, 0),
-         Protozoan_malaria_coinf = ifelse(Protozoan_coinf + malaria_coinf >= 2, 1, 0),
-         SCHISTO_malaria_coinf = ifelse(SCHISTO_coinf + malaria_coinf >= 2, 1, 0))
+  mutate(Wash_malaria_coinf = ifelse(Wash + malaria >= 2, 1, 0),
+         STH_malaria_coinf = ifelse(STH + malaria >= 2, 1, 0),
+         Protozoan_malaria_coinf = ifelse(Protozoan + malaria >= 2, 1, 0),
+         SCHISTO_malaria_coinf = ifelse(SCHISTO + malaria >= 2, 1, 0))
 
-write.csv(mergeData_coinfections, "C:/MALHelminth project/Paper1/mergeData_coinfections.csv", row.names = F)
+write.csv(mergeData_coinfections, "C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections.csv", row.names = F)
 
 ##change to long format
 dataLong_pos <- mergeData_coinfections %>%
@@ -76,68 +84,37 @@ dataLong_pos$coinf_type <- factor(dataLong_pos$coinf_type,
                                   levels = c("Wash_malaria_coinf", "STH_malaria_coinf", "Protozoan_malaria_coinf", "SCHISTO_malaria_coinf"),
                                   labels = c("Exposed malaria+WASH-related pathogens", "Exposed malaria+STH", "Exposed malaria+intestinal protozoa", "Exposed malaria+S. mansoni"))
 
+# Define colour palette
+specific_colors <- c("#339999", "#003333") 
+specific_fill <- c("#33999955", "#00333355")
 
 ###calculate percentage of coinfection types among total and 95% CI
 percentage_data_age <- dataLong_pos %>%
-  group_by(coinf_type, Age_cat) %>%
+  group_by(coinf_type) %>%
   summarize(
     percentage = mean(coinfections == 1) * 100,
     lower_ci = binom.test(sum(coinfections == 1), length(coinfections))$conf.int[1] * 100,
     upper_ci = binom.test(sum(coinfections == 1), length(coinfections))$conf.int[2] * 100
   )
 # Plot the percentages
-plot_coinf <- ggplot(percentage_data_age, aes(x = coinf_type, y = percentage, fill = Age_cat, label = sprintf("%.1f%%", percentage))) +
+plot_coinf <- ggplot(percentage_data_age, aes(x = coinf_type, y = percentage, label = sprintf("%.1f%%", percentage))) +
   geom_bar(stat = "identity", position = position_dodge()) +
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
   geom_text(position = position_dodge(width = 0.9), vjust = -0.5, size = 3) +
-  labs(title = "Percentage of Positive Cases by Antigen and Age Category",
+  labs(title = "Percentage of individuals exposed to multiple pathogen types",
        x = "Antigen",
        y = "Percentage of seropositive individuals") +
-  scale_fill_brewer(palette = "Set3") +
+  scale_fill_manual(values=c("#003333"))+
   theme(panel.background = element_blank()) +
   theme_minimal() +
+  theme_classic()+
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   ylim(0, 100)  # Set y-axis limits
 
 # Print the plot
 print(plot_coinf)
 
-
-percentage_data <- dataLong_pos %>%
-  group_by(coinf_type, Age_cat) %>%
-  summarize(
-    percentage = round(mean(coinfections == 1) * 100, 2)
-  )
-
-# Reshape the data (package fmsb assumes plotted values will be in columns)
-reshaped_data_age <- percentage_data %>%
-  pivot_wider(names_from = coinf_type, values_from = percentage)
-
-# Add maximum and minimum values for each group as package also needs these values to calibrate the plot axes
-num_columns <- ncol(reshaped_data_age) - 1  # Exclude the first column which is Age_cat
-max_row <- rep(20, num_columns)
-min_row <- rep(0, num_columns)
-
-# Add column names to max_row and min_row to match reshaped_data_age structure
-names(max_row) <- names(reshaped_data_age)[-1]
-names(min_row) <- names(reshaped_data_age)[-1]
-
-# Convert to data frame and add Age_cat column to match structure
-max_row <- c(Age_cat = "Max", as.list(max_row))
-min_row <- c(Age_cat = "Min", as.list(min_row))
-
-# Bind the rows
-reshaped_data_age <- bind_rows(max_row, min_row, reshaped_data_age)
-
-# Convert all values in the dataframe to numeric apart from first column with age categories
-data_age <- as.data.frame(sapply(reshaped_data_age[-1], as.numeric))
-rownames(data_age) <- reshaped_data_age[[1]]
-
-# Set up colors
-colors_border_age <- c(rgb(0.2, 0.5, 0.5, 0.9),
-                       rgb(0.8, 0.2, 0.5, 0.9),
-                       rgb(0.7, 0.5, 0.1, 0.9))
-
+##Spider chart--------------------
 # Custom radarchart function without labels
 radarchart_custom <- function(df, axistype=0, seg=4, pty=16, pcol=1:8, plty=1:6, plwd=1,
                               pdensity=NULL, pangle=45, pfcol=NA, cglty=3, cglwd=1,
@@ -232,16 +209,217 @@ radarchart_custom <- function(df, axistype=0, seg=4, pty=16, pcol=1:8, plty=1:6,
   }
 }
 
+
+
+#age-----------
+percentage_data <- dataLong_pos %>%
+  group_by(coinf_type, Age_cat) %>%
+  summarize(
+    percentage = round(mean(coinfections == 1) * 100, 2)
+  )
+
+# Reshape the data (package fmsb assumes plotted values will be in columns)
+reshaped_data_age <- percentage_data %>%
+  pivot_wider(names_from = coinf_type, values_from = percentage)
+
+# Add maximum and minimum values for each group as package also needs these values to calibrate the plot axes
+num_columns <- ncol(reshaped_data_age) - 1  # Exclude the first column which is Age_cat
+max_row <- rep(50, num_columns)
+min_row <- rep(0, num_columns)
+
+# Add column names to max_row and min_row to match reshaped_data_age structure
+names(max_row) <- names(reshaped_data_age)[-1]
+names(min_row) <- names(reshaped_data_age)[-1]
+
+# Convert to data frame and add Age_cat column to match structure
+max_row <- c(Age_cat = "Max", as.list(max_row))
+min_row <- c(Age_cat = "Min", as.list(min_row))
+
+# Bind the rows
+reshaped_data_age <- bind_rows(max_row, min_row, reshaped_data_age)
+
+# Convert all values in the dataframe to numeric apart from first column with age categories
+data_age <- as.data.frame(sapply(reshaped_data_age[-1], as.numeric))
+rownames(data_age) <- reshaped_data_age[[1]]
+
+# Set up colors
+colors_border_age <- c(rgb(0.2, 0.5, 0.5, 0.9),
+                       rgb(0.8, 0.2, 0.5, 0.9),
+                       rgb(0.7, 0.5, 0.1, 0.9))
+
+
+
 # Create the radar chart without automatic axis labels using the custom function
 radarchart_custom(data_age, axistype=0, pcol=colors_border_age, plwd=4, plty=1,
-                  cglcol="grey", cglty=1, axislabcol="black", title="Percentage of children exposed to multiple pathogen types", vlabels=NULL)
+                  cglcol="grey", cglty=1, axislabcol="black", title="Percentage of children exposed to multiple pathogen types by age", vlabels=NULL)
 
 # Add a legend
 legend(x=1, y=1, legend=rownames(data_age)[-c(1, 2)], bty="n", pch=16, col=colors_border_age, 
        title="Age Categories")
 
 # Manually add grid labels at 0%, 5%, 10%, 15%, and 20% on four axes
-grid_labels <- c("0%", "5%", "10%", "15%", "20%")
+grid_labels <- c("0%", "12.5%", "25%", "37.5%", "50%")
+angles <- seq(0, 2*pi, length.out = 5)
+for (i in 1:5) {
+  x_pos <- cos(angles[1]) * (i/5)
+  y_pos <- sin(angles[1]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 4)
+  x_pos <- cos(angles[2]) * (i/5)
+  y_pos <- sin(angles[2]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 2)
+  x_pos <- cos(angles[3]) * (i/5)
+  y_pos <- sin(angles[3]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 4)
+  x_pos <- cos(angles[4]) * (i/5)
+  y_pos <- sin(angles[4]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 2)
+}
+
+# Adjust the position and rotation of the variable labels manually
+text_positions <- data.frame(
+  x = c(cos(angles[1]) * 1.2, cos(angles[2]) * 1.2, cos(angles[3]) * 1.2, cos(angles[4]) * 1.2),
+  y = c(sin(angles[1]) * 1.2, sin(angles[2]) * 1.2, sin(angles[3]) * 1.2, sin(angles[4]) * 1.2),
+  labels = c("Exposed malaria + WASH-related pathogens", 
+             "Exposed malaria + STH", 
+             "Exposed malaria + intestinal protozoa", 
+             "Exposed malaria + S. mansoni")
+)
+
+# Set rotation angles
+rotations <- c(45, 0, -45, 0)
+
+for (i in 1:nrow(text_positions)) {
+  text(text_positions$x[i], text_positions$y[i], labels = text_positions$labels[i], col = "black", cex = 0.75, srt=rotations[i])
+}
+
+
+#Site-----------------
+percentage_data_Site <- dataLong_pos %>%
+  group_by(coinf_type, Site) %>%
+  summarize(
+    percentage = round(mean(coinfections == 1) * 100, 2)
+  )
+
+# Reshape the data (package fmsb assumes plotted values will be in columns)
+reshaped_data_Site <- percentage_data_Site %>%
+  pivot_wider(names_from = coinf_type, values_from = percentage)
+
+# Add maximum and minimum values for each group as package also needs these values to calibrate the plot axes
+num_columns <- ncol(reshaped_data_Site) - 1  # Exclude the first column which is Site
+max_row <- rep(50, num_columns)
+min_row <- rep(0, num_columns)
+
+# Add column names to max_row and min_row to match reshaped_data_Site structure
+names(max_row) <- names(reshaped_data_Site)[-1]
+names(min_row) <- names(reshaped_data_Site)[-1]
+
+# Convert to data frame and add Site column to match structure
+max_row <- c(Site = "Max", as.list(max_row))
+min_row <- c(Site = "Min", as.list(min_row))
+
+# Bind the rows
+reshaped_data_Site <- bind_rows(max_row, min_row, reshaped_data_Site)
+
+# Convert all values in the dataframe to numeric apart from first column with site categories
+data_site <- as.data.frame(sapply(reshaped_data_Site[-1], as.numeric))
+rownames(data_site) <- reshaped_data_Site[[1]]
+
+
+# Create the radar chart without automatic axis labels using the custom function
+radarchart_custom(data_site, axistype=0, pcol=colors_border_age, plwd=4, plty=1,
+                  cglcol="grey", cglty=1, axislabcol="black", title="Percentage of children exposed to multiple pathogen types by site", vlabels=NULL)
+
+# Add a legend
+legend(x=1, y=1, legend=rownames(data_site)[-c(1, 2)], bty="n", pch=16, col=colors_border_age, 
+       title="reshaped_data_Site")
+
+# Manually add grid labels at 0%, 5%, 10%, 15%, and 20% on four axes
+grid_labels <- c("0%", "12.5%", "25%", "37.5%", "50%")
+angles <- seq(0, 2*pi, length.out = 5)
+for (i in 1:5) {
+  x_pos <- cos(angles[1]) * (i/5)
+  y_pos <- sin(angles[1]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 4)
+  x_pos <- cos(angles[2]) * (i/5)
+  y_pos <- sin(angles[2]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 2)
+  x_pos <- cos(angles[3]) * (i/5)
+  y_pos <- sin(angles[3]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 4)
+  x_pos <- cos(angles[4]) * (i/5)
+  y_pos <- sin(angles[4]) * (i/5)
+  text(x_pos, y_pos, labels = grid_labels[i], col = "grey", cex = 0.75, pos = 2)
+}
+
+# Adjust the position and rotation of the variable labels manually
+text_positions <- data.frame(
+  x = c(cos(angles[1]) * 1.2, cos(angles[2]) * 1.2, cos(angles[3]) * 1.2, cos(angles[4]) * 1.2),
+  y = c(sin(angles[1]) * 1.2, sin(angles[2]) * 1.2, sin(angles[3]) * 1.2, sin(angles[4]) * 1.2),
+  labels = c("Exposed malaria + WASH-related pathogens", 
+             "Exposed malaria + STH", 
+             "Exposed malaria + intestinal protozoa", 
+             "Exposed malaria + S. mansoni")
+)
+
+# Set rotation angles
+rotations <- c(45, 0, -45, 0)
+
+for (i in 1:nrow(text_positions)) {
+  text(text_positions$x[i], text_positions$y[i], labels = text_positions$labels[i], col = "black", cex = 0.75, srt=rotations[i])
+}
+
+#gender---------------
+dataLong_pos <- dataLong_pos %>%
+  mutate(Sexe = case_when(
+    Sexe == "F" ~ "Female",
+    Sexe == "M" ~ "Male",
+    Sexe == "" ~ NA_character_,
+    TRUE ~ Sexe
+  )) %>%
+  filter(!is.na(Sexe))
+
+
+percentage_data_gender <- dataLong_pos %>%
+  group_by(coinf_type, Sexe) %>%
+  summarize(
+    percentage = round(mean(coinfections == 1) * 100, 2)
+  )
+
+# Reshape the data (package fmsb assumes plotted values will be in columns)
+reshaped_data_gender<- percentage_data_gender %>%
+  pivot_wider(names_from = coinf_type, values_from = percentage)
+
+# Add maximum and minimum values for each group as package also needs these values to calibrate the plot axes
+num_columns <- ncol(reshaped_data_gender) - 1  # Exclude the first column which is Sexe
+max_row <- rep(50, num_columns)
+min_row <- rep(0, num_columns)
+
+# Add column names to max_row and min_row to match reshaped_data_gender structure
+names(max_row) <- names(reshaped_data_gender)[-1]
+names(min_row) <- names(reshaped_data_gender)[-1]
+
+# Convert to data frame and add Sexe column to match structure
+max_row <- c(Sexe = "Max", as.list(max_row))
+min_row <- c(Sexe = "Min", as.list(min_row))
+
+# Bind the rows
+reshaped_data_gender <- bind_rows(max_row, min_row, reshaped_data_gender)
+
+# Convert all values in the dataframe to numeric apart from first column with site categories
+data_gender <- as.data.frame(sapply(reshaped_data_gender[-1], as.numeric))
+rownames(data_gender) <- reshaped_data_gender[[1]]
+
+
+# Create the radar chart without automatic axis labels using the custom function
+radarchart_custom(data_gender, axistype=0, pcol=colors_border_age, plwd=4, plty=1,
+                  cglcol="grey", cglty=1, axislabcol="black", title="Percentage of children exposed to multiple pathogen types by gender", vlabels=NULL)
+
+# Add a legend
+legend(x=1, y=1, legend=rownames(data_gender)[-c(1, 2)], bty="n", pch=16, col=colors_border_age, 
+       title="reshaped_data_Site")
+
+# Manually add grid labels at 0%, 5%, 10%, 15%, and 20% on four axes
+grid_labels <- c("0%", "12.5%", "25%", "37.5%", "50%")
 angles <- seq(0, 2*pi, length.out = 5)
 for (i in 1:5) {
   x_pos <- cos(angles[1]) * (i/5)
