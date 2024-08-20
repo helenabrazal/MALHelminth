@@ -21,7 +21,16 @@ coinfection_data <- outcome_data %>%
 
 coinfection_data <- na.omit(coinfection_data)
 
+#recode time_to_water to reduce levels
+unique (coinfection_data$time_to_water)
 
+coinfection_data <- coinfection_data %>%   
+  mutate(time_to_water = case_when(
+    time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
+    time_to_water == "15-30_minutes" ~ "15-30 minutes",
+    time_to_water == ">30_minutes" ~ ">30 minutes",
+    TRUE ~ time_to_water # this ensures that other values remain unchanged
+  ))
 # Select coinfection variable and covariates
 outcome_vars <- coinfection_data[, 56:59]  # Assuming columns 3 to 26 are outcomes for MFIs
 explanatory_vars <- coinfection_data[, 60:81]  # Assuming columns 60 to 81 are explanatory variables
@@ -37,6 +46,7 @@ outcome_var_names <- names(outcome_vars)
 # Get explanatory variable names
 explanatory_var_names <- names(explanatory_vars)
 # Define outcome variables
+
 
 #Check if factor and define reference factor before regression
 # Update this list based on the variables you expect to be factors
@@ -80,7 +90,7 @@ preprocess_factors <- function(data) {
       net_used = relevel(as.factor(net_used), ref = "Every_night"),
       toilet_type = relevel(as.factor(toilet_type), ref = "Private_toilet"),
       wash_hands = relevel(as.factor(wash_hands), ref = "Water_and_soap"),
-      water_contact = relevel(as.factor(water_contact), ref = "Rarely"),
+      water_contact = relevel(as.factor(water_contact), ref = "Never"),
       water_source = relevel(as.factor(water_source), ref = "Private_source"),
       shoe_wearing = relevel(as.factor(shoe_wearing), ref = "Closed_shoes"),
       child_sex = relevel(as.factor(child_sex), ref = "Female"),
@@ -91,7 +101,7 @@ preprocess_factors <- function(data) {
       net_available = relevel(as.factor(net_available), ref = "No"),
       hand_wash_area = relevel(as.factor(hand_wash_area), ref = "No"),
       freq_wash_before_eat = relevel(as.factor(freq_wash_before_eat), ref = "Always"),
-      time_to_water = relevel(as.factor(time_to_water), ref = ">30_minutes"),
+      time_to_water = relevel(as.factor(time_to_water), ref = "<15 minutes"),
       eat_soil = relevel(as.factor(eat_soil), ref = "No")
     )
 }
@@ -196,7 +206,7 @@ multiple_logistic_results <- bind_rows(results_list, .id = "outcome_var")
 # Check if the results are created and non-empty
 if (nrow(multiple_logistic_results) > 0) {
   print(multiple_logistic_results)
-  write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results_coinfections.csv", row.names = FALSE)
+  write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results_coinfections_confounder.csv", row.names = FALSE)
 } else {
   message("No results to save or there was an issue with the models.")
 }
@@ -208,7 +218,7 @@ create_and_save_regression_table <- function(outcome_var_name) {
   tryCatch({
     # Define formula for the model
     formula <- as.formula(
-      paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
+      paste(outcome_var_name, "~ study_site +", paste(names(explanatory_vars), collapse = " + "))
     )
     
     # Fit the logistic regression model
@@ -227,7 +237,7 @@ create_and_save_regression_table <- function(outcome_var_name) {
     }
     
     # Save the table to HTML file
-    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Regression_coinfections_Table_", outcome_var_name, ".html")
+    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Regression_coinfections_confounder_Table_", outcome_var_name, ".html")
     gtsummary::as_gt(table) %>% gt::gtsave(file = file_path)
     
     message("Table saved for outcome variable: ", outcome_var_name)
@@ -241,4 +251,3 @@ create_and_save_regression_table <- function(outcome_var_name) {
 for (outcome in outcome_var_names) {
   create_and_save_regression_table(outcome)
 }
-
