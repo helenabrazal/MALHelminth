@@ -19,6 +19,17 @@ covariate_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/c
 coinfection_data <- outcome_data %>% 
   left_join(covariate_data, by = "Sample")
 
+#recode time_to_water to reduce levels
+unique (coinfection_data$time_to_water)
+
+coinfection_data <- coinfection_data %>%   
+  mutate(time_to_water = case_when(
+    time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
+    time_to_water == "15-30_minutes" ~ "15-30 minutes",
+    time_to_water == ">30_minutes" ~ ">30 minutes",
+    TRUE ~ time_to_water # this ensures that other values remain unchanged
+  ))
+
 coinfection_data <- na.omit(coinfection_data)
 
 
@@ -140,7 +151,7 @@ preprocess_factors <- function(data) {
       net_used = relevel(as.factor(net_used), ref = "Every_night"),
       toilet_type = relevel(as.factor(toilet_type), ref = "Private_toilet"),
       wash_hands = relevel(as.factor(wash_hands), ref = "Water_and_soap"),
-      water_contact = relevel(as.factor(water_contact), ref = "Rarely"),
+      water_contact = relevel(as.factor(water_contact), ref = "Never"),
       water_source = relevel(as.factor(water_source), ref = "Private_source"),
       shoe_wearing = relevel(as.factor(shoe_wearing), ref = "Closed_shoes"),
       child_sex = relevel(as.factor(child_sex), ref = "Female"),
@@ -151,7 +162,7 @@ preprocess_factors <- function(data) {
       net_available = relevel(as.factor(net_available), ref = "No"),
       hand_wash_area = relevel(as.factor(hand_wash_area), ref = "No"),
       freq_wash_before_eat = relevel(as.factor(freq_wash_before_eat), ref = "Always"),
-      time_to_water = relevel(as.factor(time_to_water), ref = ">30_minutes"),
+      time_to_water = relevel(as.factor(time_to_water), ref = "<15 minutes"),
       eat_soil = relevel(as.factor(eat_soil), ref = "No")
     )
 }
@@ -302,7 +313,7 @@ for (outcome in outcome_var_names) {
   create_and_save_regression_table(outcome)
 }
 
-# Multivariate linear regression ---------------------------------------------------------------------------------------
+# Multivariate linear regression using ab levels---------------------------------------------------------------------------------------
 # Define the function to run multivariate linear regression and create tables
 run_linear_regression_and_save_tables <- function(outcome_var_name) {
   tryCatch({
@@ -336,8 +347,8 @@ run_linear_regression_and_save_tables <- function(outcome_var_name) {
   })
 }
 
-# Define the outcome variable names for linear regression (columns 3 to 26)
-outcome_var_names <- names(coinfection_data)[3:26]
+# Define the outcome variable names for linear regression 
+outcome_var_names <- names(coinfection_data)[27:35]
 
 # Generate and save tables for all outcome variables
 for (outcome in outcome_var_names) {
@@ -444,7 +455,7 @@ run_linear_regression_and_save_tables_with_confounders <- function(outcome_var_n
   tryCatch({
     # Define the formula including confounders
     formula <- as.formula(
-      paste(outcome_var_name, "~ age_cat + study_site +", paste(setdiff(names(explanatory_vars), c("age_cat", "study_site")), collapse = " + "))
+      paste(outcome_var_name, "~ study_site +", paste(setdiff(names(explanatory_vars), c("age_cat", "study_site")), collapse = " + "))
     )
     
     # Fit the linear regression model
@@ -472,13 +483,14 @@ run_linear_regression_and_save_tables_with_confounders <- function(outcome_var_n
   })
 }
 
-# Define the outcome variable names for linear regression (columns 3 to 26)
-linear_outcome_var_names <- names(coinfection_data)[3:26]
+# Define the outcome variable names for linear regression 
+linear_outcome_var_names <- names(coinfection_data)[27:35]
 
 # Generate and save tables for all outcome variables including confounders
 for (outcome in linear_outcome_var_names) {
   run_linear_regression_and_save_tables_with_confounders(outcome)
 }
+
 
 
 
