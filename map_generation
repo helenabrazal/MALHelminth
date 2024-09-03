@@ -1,14 +1,18 @@
+# Load required libraries
 library(sf)
 library(ggplot2)
 library(extrafont)
 library(cowplot)
 library(dplyr)
 
-# Read your data only coordinates
+# Read your data with coordinates
 data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections.csv")
 
-# Just need desired columns with individual data, coordinates and Sites
-data <- data[, c(2, 45, 46, 286)]
+# Just need desired columns with individual data, coordinates, and Sites
+data <- data[, c(2, 45, 46, 286)]  # Adjust indices based on your actual data structure
+
+# Rename columns to ensure proper names
+colnames(data) <- c("id", "geopoint_long", "geopoint_lat", "Site")
 
 # Check for missing values in coordinates
 summary(data[, c("geopoint_long", "geopoint_lat")])
@@ -17,14 +21,14 @@ summary(data[, c("geopoint_long", "geopoint_lat")])
 data_clean <- data %>%
   filter(!is.na(geopoint_long) & !is.na(geopoint_lat))
 
-# Read the JSON file (replace with the actual path to your JSON file)
+# Read the JSON file
 geojson_data <- st_read("C:/MALHelminth project/Paper1/MALHelminth_serology/gadm41_SEN_2.json")
 
 # Convert to shapefile 
 st_write(geojson_data, "C:/MALHelminth project/Paper1/MALHelminth_serology/gadm41_SEN_3.shp")
 
 # Load the shapefile
-shapefile_data <- st_read("gadm41_SEN_3.shp")
+shapefile_data <- st_read("C:/MALHelminth project/Paper1/MALHelminth_serology/gadm41_SEN_3.shp")
 
 # Filter for specific districts
 saraya <- shapefile_data %>%
@@ -51,7 +55,10 @@ main_map <- ggplot() +
   geom_sf(data = shapefile_data, fill = "transparent", color = "darkgrey") +  # Dark grey lines for all districts
   geom_sf(data = filtered_districts, aes(fill = NAME_2), color = "darkgrey") +  # Dark grey lines for the filtered districts
   scale_fill_manual(values = c("Diourbel" = "#9DBF9E", "Saraya" = "#A84268")) +  # Set custom colors
-  labs(title = "Map of Senegal with study sites highlighted", fill = "Study districts") +  # Update legend title
+  labs(
+    title = "Map of Senegal with Study Sites Highlighted", 
+    fill = "Study Districts"
+  ) +  # Update legend title
   annotation_scale(
     location = "br",  # Place scale bar in the bottom-right corner
     width_hint = 0.2  # Adjust width of the scale bar
@@ -70,7 +77,13 @@ main_map <- ggplot() +
   theme_minimal() +
   theme(
     plot.margin = margin(0, 0, 0, 0),  # Remove margins to better fit inset maps
-    axis.text.x = element_text(angle = 90, hjust = 1)  # Rotate x-axis labels
+    axis.text.x = element_text(angle = 90, hjust = 1, color = "black", size = 10),  # Rotate x-axis labels, set color and size
+    axis.text.y = element_text(color = "black", size = 10),  # Set y-axis labels color and size
+    axis.title.x = element_text(color = "black", size = 12),  # Set x-axis title color and size
+    axis.title.y = element_text(color = "black", size = 12),  # Set y-axis title color and size
+    plot.title = element_text(color = "black", size = 14, face = "bold"),  # Set plot title color and size
+    legend.title = element_text(color = "black", size = 12),  # Set legend title color and size
+    legend.text = element_text(color = "black", size = 10)  # Set legend text color and size
   )
 
 # Display the main map
@@ -85,14 +98,15 @@ saraya_map <- ggplot() +
   theme_minimal() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(angle = 90, hjust = 1),  # Rotate x-axis labels
-    axis.text = element_text(size = 8),  # Keep axis text
-    axis.title = element_blank(),  # Remove axis titles
-    axis.ticks = element_line(size = 0.5),  # Keep axis ticks
+    axis.text.x = element_text(angle = 90, hjust = 1, color = "black", size = 10),  # Rotate x-axis labels, set color and size
+    axis.text.y = element_text(color = "black", size = 10),  # Set y-axis labels color and size
+    axis.title.x = element_text(color = "black", size = 12),  # Set x-axis title color and size
+    axis.title.y = element_text(color = "black", size = 12),  # Set y-axis title color and size
+    plot.title = element_text(color = "black", size = 14, face = "bold"),  # Set plot title color and size
     panel.grid = element_blank()  # Remove grid lines
   )
 
-# Display Diourbel map
+# Display Saraya map
 print(saraya_map)
 
 # Create Diourbel map with data points
@@ -104,10 +118,11 @@ diourbel_map <- ggplot() +
   theme_minimal() +
   theme(
     legend.position = "none",
-    axis.text.x = element_text(angle = 90, hjust = 1),  # Rotate x-axis labels
-    axis.text = element_text(size = 8),  # Keep axis text
-    axis.title = element_blank(),  # Remove axis titles
-    axis.ticks = element_line(size = 0.5),  # Keep axis ticks
+    axis.text.x = element_text(angle = 90, hjust = 1, color = "black", size = 10),  # Rotate x-axis labels, set color and size
+    axis.text.y = element_text(color = "black", size = 10),  # Set y-axis labels color and size
+    axis.title.x = element_text(color = "black", size = 12),  # Set x-axis title color and size
+    axis.title.y = element_text(color = "black", size = 12),  # Set y-axis title color and size
+    plot.title = element_text(color = "black", size = 14, face = "bold"),  # Set plot title color and size
     panel.grid = element_blank()  # Remove grid lines
   )
 
@@ -116,14 +131,14 @@ print(diourbel_map)
 
 # Create inset maps with ggdraw
 inset_map_diourbel <- ggdraw() +
-  draw_plot(diourbel_map, x = 0, y = 0.7, width = 0.4, height = 0.3)  # Position in top-left corner
+  draw_plot(diourbel_map, x = 0, y = 0.5, width = 0.5, height = 0.4)  # Position in top-left corner
 
 inset_map_saraya <- ggdraw() +
-  draw_plot(saraya_map, x = 0.65, y = 0.2, width = 0.4, height = 0.3)  # Position in bottom-right corner
+  draw_plot(saraya_map, x = 0.6, y = 0.2, width = 0.5, height = 0.4)  # Position in bottom-right corner
 
 # Create the final plot
 final_plot <- ggdraw() +
-  draw_plot(main_map, x = 0.2, y = 0.3, width = 0.7, height = 0.7) +  # Centered main map
+  draw_plot(main_map, x = 0.35, y = 0.3, width = 0.4, height = 0.5) +  # Centered main map
   draw_plot(inset_map_diourbel) +
   draw_plot(inset_map_saraya)
 
