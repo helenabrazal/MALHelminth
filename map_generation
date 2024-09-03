@@ -1,0 +1,133 @@
+library(sf)
+library(ggplot2)
+library(extrafont)
+library(cowplot)
+library(dplyr)
+
+# Read your data only coordinates
+data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections.csv")
+
+# Just need desired columns with individual data, coordinates and Sites
+data <- data[, c(2, 45, 46, 286)]
+
+# Check for missing values in coordinates
+summary(data[, c("geopoint_long", "geopoint_lat")])
+
+# Remove rows with missing coordinates
+data_clean <- data %>%
+  filter(!is.na(geopoint_long) & !is.na(geopoint_lat))
+
+# Read the JSON file (replace with the actual path to your JSON file)
+geojson_data <- st_read("C:/MALHelminth project/Paper1/MALHelminth_serology/gadm41_SEN_2.json")
+
+# Convert to shapefile 
+st_write(geojson_data, "C:/MALHelminth project/Paper1/MALHelminth_serology/gadm41_SEN_3.shp")
+
+# Load the shapefile
+shapefile_data <- st_read("gadm41_SEN_3.shp")
+
+# Filter for specific districts
+saraya <- shapefile_data %>%
+  dplyr::filter(NAME_2 == "Saraya")
+diourbel <- shapefile_data %>%
+  dplyr::filter(NAME_2 == "Diourbel")
+
+# Create a spatial object for the coordinates
+coordinates <- st_as_sf(data_clean, coords = c("geopoint_long", "geopoint_lat"), crs = st_crs(shapefile_data))
+
+# Filter coordinates for each district
+saraya_coords <- coordinates %>%
+  st_intersection(saraya)
+
+diourbel_coords <- coordinates %>%
+  st_intersection(diourbel)
+
+# Combine filtered districts for highlighting on the main map
+filtered_districts <- shapefile_data %>%
+  dplyr::filter(NAME_2 %in% c("Saraya", "Diourbel"))
+
+# Create the main map with scale bar and compass
+main_map <- ggplot() +
+  geom_sf(data = shapefile_data, fill = "transparent", color = "darkgrey") +  # Dark grey lines for all districts
+  geom_sf(data = filtered_districts, aes(fill = NAME_2), color = "darkgrey") +  # Dark grey lines for the filtered districts
+  scale_fill_manual(values = c("Diourbel" = "#9DBF9E", "Saraya" = "#A84268")) +  # Set custom colors
+  labs(title = "Map of Senegal with study sites highlighted", fill = "Study districts") +  # Update legend title
+  annotation_scale(
+    location = "br",  # Place scale bar in the bottom-right corner
+    width_hint = 0.2  # Adjust width of the scale bar
+  ) +
+  annotation_north_arrow(
+    location = "tr",  # Place north arrow in the top-right corner
+    which_north = "true",
+    pad_x = unit(0.5, "cm"),
+    pad_y = unit(0.5, "cm"),
+    style = north_arrow_fancy_orienteering(
+      line_width = 0.5,  # Adjust line width
+      line_col = "black",
+      fill = c("black", "white")
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    plot.margin = margin(0, 0, 0, 0),  # Remove margins to better fit inset maps
+    axis.text.x = element_text(angle = 90, hjust = 1)  # Rotate x-axis labels
+  )
+
+# Display the main map
+print(main_map)
+
+# Create Saraya map with data points
+saraya_map <- ggplot() +
+  geom_sf(data = saraya, aes(fill = NAME_2), color = "darkgrey") +
+  geom_sf(data = saraya_coords, color = "black", size = 1) +  # Add coordinates as small black points
+  scale_fill_manual(values = c("Saraya" = "#C2A5A5")) +  # Lighter color for Saraya
+  labs(title = "Saraya") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 90, hjust = 1),  # Rotate x-axis labels
+    axis.text = element_text(size = 8),  # Keep axis text
+    axis.title = element_blank(),  # Remove axis titles
+    axis.ticks = element_line(size = 0.5),  # Keep axis ticks
+    panel.grid = element_blank()  # Remove grid lines
+  )
+
+# Display Diourbel map
+print(saraya_map)
+
+# Create Diourbel map with data points
+diourbel_map <- ggplot() +
+  geom_sf(data = diourbel, aes(fill = NAME_2), color = "darkgrey") +
+  geom_sf(data = diourbel_coords, color = "black", size = 1) +  # Add coordinates as small black points
+  scale_fill_manual(values = c("Diourbel" = "#B4D6C1")) +  # Lighter color for Diourbel
+  labs(title = "Diourbel") +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 90, hjust = 1),  # Rotate x-axis labels
+    axis.text = element_text(size = 8),  # Keep axis text
+    axis.title = element_blank(),  # Remove axis titles
+    axis.ticks = element_line(size = 0.5),  # Keep axis ticks
+    panel.grid = element_blank()  # Remove grid lines
+  )
+
+# Display Diourbel map
+print(diourbel_map)
+
+# Create inset maps with ggdraw
+inset_map_diourbel <- ggdraw() +
+  draw_plot(diourbel_map, x = 0, y = 0.7, width = 0.4, height = 0.3)  # Position in top-left corner
+
+inset_map_saraya <- ggdraw() +
+  draw_plot(saraya_map, x = 0.65, y = 0.2, width = 0.4, height = 0.3)  # Position in bottom-right corner
+
+# Create the final plot
+final_plot <- ggdraw() +
+  draw_plot(main_map, x = 0.2, y = 0.3, width = 0.7, height = 0.7) +  # Centered main map
+  draw_plot(inset_map_diourbel) +
+  draw_plot(inset_map_saraya)
+
+# Display the final plot
+print(final_plot)
+
+
