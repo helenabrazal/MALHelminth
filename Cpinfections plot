@@ -49,12 +49,12 @@ mergeData_coinfections <- mergeData_coinfections %>%
 ggplot(mergeData_coinfections, aes(x = number_infections)) +
   # Create a histogram with count on y-axis
   geom_histogram(stat = "count", fill = "sky blue", color = "black") +
-  # Add text labels for counts on top of bars
   geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +
-  # Add labels and title
-  labs(x = "Number of historical infections with different pathogen types", y = "Count", title = "Count of participants by number of historical infections") +
-  # Customize theme
-  theme_minimal() +
+  labs(x = "Number pathogen types to which individuals tested seropositive", y = "Count", title = "Count of participants by number of historical infections") +
+  theme(panel.background = element_blank(), axis.title.x=element_text(face = "bold", size = 15),axis.text.x = element_text(face = "bold", hjust = 1, size = 12),
+        legend.text = element_text(size=15), legend.title = element_blank(),
+        axis.title.y=element_text(face = "bold",size = 15),axis.text.y = element_text(size = 15),
+        title=element_text(face = "bold", size = 15)) +
   # Explicitly include breaks for numbers 1 to 6 on the x-axis
   scale_x_continuous(breaks = 0:6)
 
@@ -451,4 +451,3 @@ rotations <- c(45, 0, -45, 0)
 
 for (i in 1:nrow(text_positions)) {
   text(text_positions$x[i], text_positions$y[i], labels = text_positions$labels[i], col = "black", cex = 0.75, srt=rotations[i])
-}
