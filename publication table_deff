@@ -1,0 +1,295 @@
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
+
+# Packages
+{library(pacman)
+  p_load(scales, ggplot2, tidyverse, dplyr, gtsummary, gt, labelled, haven, flextable)}
+
+## Data
+
+# Read in full raw data to extract outcome data
+outcome_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections_only.csv", stringsAsFactors = F)
+
+# Read in epi covariates
+covariate_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/covariate_data_complete.csv", stringsAsFactors = F)
+
+# Bind outcome and covariate data
+coinfection_data <- outcome_data %>% 
+  left_join(covariate_data, by = "Sample")
+
+
+#recode variables to reduce levels
+
+mergeData_coinfections_table <- coinfection_data %>%
+  mutate(
+    # Recode net_used
+    net_used = recode(net_used, 
+                      "Every_night" = "Every night", 
+                      "Rarely" = "Rarely", 
+                      "Never" = "Never"),
+    
+    # Recode toilet_type
+    toilet_type = recode(toilet_type, 
+                         "Private_toilet" = "Private", 
+                         "Shared_toilet" = "Shared with families", 
+                         "Pit_latrine" = "Latrines", 
+                         "No_toilet" = "No toilet"),
+    
+    # Recode wash_hands
+    wash_hands = recode(wash_hands, 
+                        "Water_only" = "Wash with water only", 
+                        "Water_and_soap" = "Wash with soap and water"),
+    
+    # Recode child_sex with handling blanks
+    child_sex = case_when(
+      child_sex == "Female" ~ "Female",
+      child_sex == "Male" ~ "Male",
+      is.na(child_sex) | child_sex == "" ~ "Other",
+      TRUE ~ child_sex  # Retain any other values unchanged
+    ),
+    
+    # Recode time_to_water
+    time_to_water = case_when(
+      time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
+      time_to_water == "15-30_minutes" ~ "15-30 minutes",
+      time_to_water == ">30_minutes" ~ ">30 minutes",
+      TRUE ~ time_to_water  # Retain any other values unchanged
+    ),
+    
+    # Recode water_contact
+    water_contact = case_when(
+      water_contact %in% c("Never", "Rarely") ~ "Rarely",
+      water_contact == "Monthly" ~ "Unfrequently",
+      water_contact %in% c("Weekly", "Daily") ~ "Frequently",
+      TRUE ~ water_contact  # Retain any other values unchanged
+    )
+  )
+
+## Set factor levels to ensure correct order in the table
+mergeData_coinfections_table <- mergeData_coinfections_table %>%
+  mutate(
+    time_to_water = factor(time_to_water, levels = c("<15 minutes", "15-30 minutes", ">30 minutes")),
+    water_contact = factor(water_contact, levels = c("Frequently", "Unfrequently", "Rarely")),
+    net_used = factor(net_used, levels = c("Every night", "Rarely", "Never")),
+    wash_hands= factor(wash_hands, levels=c("Wash with soap and water", "Wash with water only"))
+    )
+  
+
+## Rename variables
+mergeData_coinfections_table <- mergeData_coinfections_table %>%
+  rename(
+    Age_category = age_cat,
+    Sex = child_sex,
+    Site=study_site,
+    Walking_time_from_water_source = time_to_water,
+    Water_contact_frequency = water_contact,
+    Hand_washing_habit = wash_hands,
+    ITN_use_frequency = net_used,
+    Type_of_toilet = toilet_type,
+    
+    Cryptosporidium_positive = cryptosporidium_pos,
+    Malaria_protection_positive = malaria_protect_pos,
+    Taenia_positive = taenia_pos,
+    Recent_malaria_positive = malaria_recent_pos,
+    Strongyloides_positive = Strongyloides_pos,
+    Historical_malaria_positive = malaria_historical_pos,
+    Schistosoma_positive = Smansoni_pos,
+    Necator_positive = necator_pos,
+    Giardia_positive = giardia_pos,
+    Wash_malaria_coinfection = Wash_malaria_coinf,
+    STH_malaria_coinfection = STH_malaria_coinf,
+    Protozoan_malaria_coinfection = Protozoan_malaria_coinf,
+    SCHISTO_malaria_coinfection = SCHISTO_malaria_coinf
+  )
+
+# Relabel variables for labels
+var_label(mergeData_coinfections_table) <- list(
+  Age_category = "Age category", 
+  Sex = "Sex", 
+  Walking_time_from_water_source = "Walking time from water source", 
+  Water_contact_frequency = "Water contact frequency", 
+  Hand_washing_habit = "Hand washing habit after toilet use", 
+  ITN_use_frequency = "ITN use frequency",
+  Type_of_toilet = "Type of toilet",
+  Cryptosporidium_positive = "C. parvum exposure",
+  Taenia_positive = "T. solium exposure",
+  Recent_malaria_positive = "Recent P. falciparum exposure" ,
+  Strongyloides_positive = "S. stercoralis exposure",
+  Historical_malaria_positive = "Historical P. falciparum exposure",
+  Malaria_protection_positive = "P. falciparum seroprotection",
+  Schistosoma_positive = "S. mansoni exposure",
+  Necator_positive = "N. americanus exposure" ,
+  Giardia_positive = "G. lamblia  exposure" ,
+  Wash_malaria_coinfection = "WASH pathogens+P. falciparum exposure",
+  STH_malaria_coinfection = "STH+P. falciparum  exposure",
+  Protozoan_malaria_coinfection = "Intestinal protozoa+P. falciparum  exposure",
+  SCHISTO_malaria_coinfection = "S. mansoni+P. falciparum  exposure"
+)
+
+###### Start generating tables 
+
+### Demographic table (descriptive)
+
+table <- mergeData_coinfections_table %>% select(Age_category, Site, Sex)
+
+table_summ<-table %>% tbl_summary(
+  missing = "no",
+  statistic = list(
+    all_continuous() ~ "{mean} ({sd})",
+    all_categorical() ~ "{n} / {N} ({p}%)"
+  ),
+  digits = all_continuous() ~ 2
+)
+
+# Convert the gtsummary table to gt table
+gt_table <- as_gt(table_summ)
+
+# Adjust table output size and save the table with extra space for margins
+gtsave(gt_table, "table_summ_image.png", 
+       expand = 20)  # expand adds space around the table to avoid margins being cut
+
+### Coinfections table
+table_coinf_age <- mergeData_coinfections_table %>% select(
+  Age_category, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive, 
+  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
+)
+
+table_coinf_Site <- mergeData_coinfections_table %>% select(
+  Site, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive,
+  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
+)
+
+#remove blank values from Sex
+mergeData_coinfections_table <- mergeData_coinfections_table %>%
+  filter(Sex != "")
+
+table_coinf_sex<- mergeData_coinfections_table %>% select(
+  Sex, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive,
+  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
+)
+
+# Create the summary table and add p-values using t-test
+summary_table_age <- table_coinf_age %>%
+  tbl_summary(by = Age_category) %>%
+  add_p(test = everything() ~ "t.test") %>%
+  add_overall() %>%
+  add_ci() %>%
+  # Adding spanning header
+  as_gt() %>%
+  gt::tab_row_group(
+    group = "Multiple pathogen exposure",
+    rows = 10:13
+  ) %>%
+  gt::tab_row_group(
+    group = "Single pathogen exposure",
+    rows = 1:9
+  )
+
+# Display the table
+summary_table_age
+
+# Create the summary table and add p-values using t-test
+summary_table_site <- table_coinf_Site %>%
+  tbl_summary(by = Site) %>%
+  add_p(test = everything() ~ "t.test") %>%
+  add_overall() %>%
+  add_ci() %>%
+  # Adding spanning header
+  as_gt() %>%
+  gt::tab_row_group(
+    group = "Multiple pathogen exposure",
+    rows = 10:13
+  ) %>%
+  gt::tab_row_group(
+    group = "Single pathogen exposure",
+    rows = 1:9
+  )
+
+# Display the table
+summary_table_site
+
+# Create the summary table and add p-values using t-test
+summary_table_sex <- table_coinf_sex %>%
+  tbl_summary(by = Sex) %>%
+  add_p(test = everything() ~ "t.test") %>%
+  add_overall() %>%
+  add_ci() %>%
+  # Adding spanning header
+  as_gt() %>%
+  gt::tab_row_group(
+    group = "Multiple pathogen exposure",
+    rows = 10:13
+  ) %>%
+  gt::tab_row_group(
+    group = "Single pathogen exposure",
+    rows = 1:9
+  )
+
+# Display the table
+summary_table_sex
+
+# Export the table to an HTML file
+gtsave(table_summ, "summary_table.html")
+gtsave(summary_table_site, "summary_table_site.html")
+gtsave(summary_table_age, "summary_table_age.html")
+gtsave(summary_table_sex, "summary_table_sex.html")
+
+#separate age and Sex by site-------------------
+
+# List of unique sites
+sites <- unique(mergeData_coinfections_table$Site)
+
+# Function to create summary table for a given site
+create_summary_table <- function(data, by_var, group_var, group_labels, title) {
+  data %>%
+    tbl_summary(by = !!sym(by_var)) %>%
+    add_p(test = everything() ~ "t.test") %>%
+    add_overall() %>%
+    add_ci() %>%
+    # Adding spanning headers
+    as_gt() %>%
+    gt::tab_row_group(
+      group = group_labels[2],
+      rows = which(colnames(data) %in% group_var[2])
+    ) %>%
+    gt::tab_row_group(
+      group = group_labels[1],
+      rows = which(colnames(data) %in% group_var[1])
+    ) %>%
+    gt::tab_header(title = title)
+}
+
+# Loop through each site and create tables for age and Sex
+for (site in sites) {
+  # Filter data for the current site
+  site_data <- mergeData_coinfections_table %>% filter(Site == site)
+  
+  # Define columns for single and multiple pathogen exposures
+  single_exposures <- c("Cryptosporidium_positive", "Taenia_positive", "Strongyloides_positive", 
+                        "Historical_malaria_positive", "Malaria_protection_positive", "Recent_malaria_positive", 
+                        "Schistosoma_positive", "Necator_positive", "Giardia_positive")
+  multiple_exposures <- c("Wash_malaria_coinfection", "STH_malaria_coinfection", 
+                          "Protozoan_malaria_coinfection", "SCHISTO_malaria_coinfection")
+  
+  # Create summary tables
+  summary_table_age <- create_summary_table(
+    site_data %>% select(Age_category, all_of(single_exposures), all_of(multiple_exposures)),
+    "Age_category", list(single_exposures, multiple_exposures), 
+    c("Single pathogen exposure", "Multiple pathogen exposure"),
+    paste("IgG antibody levels by age for site", site)
+  )
+  
+  summary_table_Sex <- create_summary_table(
+    site_data %>% select(Sex, all_of(single_exposures), all_of(multiple_exposures)),
+    "Sex", list(single_exposures, multiple_exposures), 
+    c("Single pathogen exposure", "Multiple pathogen exposure"),
+    paste("IgG antibody levels by Sex for site", site)
+  )
+  
+  # Display the tables
+  print(summary_table_age)
+  print(summary_table_Sex)
+  
+  # Save the tables to HTML files
+  gtsave(summary_table_age, paste0("summary_table_age_site_", site, ".html"))
+  gtsave(summary_table_Sex, paste0("summary_table_Sex_site_", site, ".html"))
+}
