@@ -7,7 +7,7 @@ setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 
 # Packages
 {library(pacman)
-  p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, car, tidymodels, dotwhisker, tidyverse, gt,broom)}
+  p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, car, tidymodels, dotwhisker, tidyverse, gt, broom, reshape2)}
 
 # Read in full raw data to extract outcome data
 outcome_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections_only.csv", stringsAsFactors = F)
@@ -209,288 +209,78 @@ write.csv(univar_results, file="C:/MALHelminth project/Paper1/MALHelminth_serolo
 
 # Multivariate regression ---------------------------------------------------------------------------------------
 
-# Using p-value cut-off of 0.1 to select covariates for multivariate analysis
-multi_covariates <- univar_results %>% 
-  filter(p.value <= 0.1) %>%
-  filter(term != "(Intercept)") 
-
-table(multi_covariates$term)
-
-#all covariates are below 0.1 for some outcomes so we will keep them all 
-
-#define function
 run_multiple_logistic_regression <- function(outcome_var_name) {
   tryCatch({
+    # Construct the formula for logistic regression
     formula <- as.formula(
       paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
     )
     
-    # Check if the formula is valid
+    # Print the formula for clarity
     print(paste("Fitting model for outcome:", outcome_var_name))
-    print(formula)
     
-    model <- glm(
+    # Fit the full logistic regression model
+    full_model <- glm(
       formula,
       family = "binomial",
       data = coinfection_data
     )
     
-    result <- broom::tidy(
-      model,
-      exponentiate = TRUE,
-      conf.int = TRUE
-    ) %>% 
-      mutate(outcome_var = outcome_var_name)
+    # Perform backward selection based on AIC using MASS::stepAIC
+    selected_model <- MASS::stepAIC(full_model, direction = "backward", trace = FALSE)
     
-    return(result)
+    # Tidy up the results
+    result <- broom::tidy(
+      selected_model,
+      exponentiate = TRUE,   # Exponentiate to get odds ratios
+      conf.int = TRUE        # Add confidence intervals
+    ) %>% 
+      dplyr::mutate(outcome_var = outcome_var_name)  # Add outcome variable for reference
+    
+    return(result)  # Return the tidy results
+    
   }, error = function(e) {
+    # Handle errors by printing the message and returning NULL
     message("Error in model for outcome variable: ", outcome_var_name)
     message("Error message: ", e$message)
-    return(NULL)  # Return NULL in case of error
+    return(NULL)
   })
 }
 
-#run regression models outcome by outcome 
+# Run the logistic regression models for each outcome variable
 
 results_list <- list()
 
 for (outcome in outcome_var_names) {
   print(paste("Running model for outcome:", outcome))
   result <- run_multiple_logistic_regression(outcome)
+  
   if (!is.null(result)) {
-    results_list[[outcome]] <- result
+    results_list[[outcome]] <- result  # Add results to the list if successful
   }
 }
 
+# Combine all the results into one data frame
 multiple_logistic_results <- bind_rows(results_list, .id = "outcome_var")
 
-# Check if the results are created and non-empty
+# Check if any results exist
 if (nrow(multiple_logistic_results) > 0) {
+  
+  # Holm-Bonferroni correction
+  # Sort the p-values in increasing order, and apply the Holm correction
+  
+  multiple_logistic_results <- multiple_logistic_results %>%
+    dplyr::mutate(rank = rank(p.value, ties.method = "first")) %>% # Rank the p-values
+    dplyr::mutate(holm_pvalue = p.adjust(p.value, method = "holm")) # Holm-Bonferroni correction
+  
+  # Remove the rank column if needed
+  multiple_logistic_results <- dplyr::select(multiple_logistic_results, -rank)
+  
+  # Print and save the results
   print(multiple_logistic_results)
   write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results.csv", row.names = FALSE)
+  
 } else {
   message("No results to save or there was an issue with the models.")
 }
-
-final_multivar_model %>% tbl_regression(exponentiate = T)
-
-# Function to create and save regression table for each model
-create_and_save_regression_table <- function(outcome_var_name) {
-  tryCatch({
-    # Define formula for the model
-    formula <- as.formula(
-      paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
-    )
-    
-    # Fit the logistic regression model
-    model <- glm(
-      formula,
-      family = "binomial",
-      data = coinfection_data
-    )
-    
-    # Create regression table
-    table <- tbl_regression(model)
-    
-    # Check if tbl_regression object is created
-    if (!inherits(table, "gtsummary")) {
-      stop("Failed to create gtsummary object.")
-    }
-    
-    # Save the table to HTML file
-    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Regression_Table_", outcome_var_name, ".html")
-    gtsummary::as_gt(table) %>% gt::gtsave(file = file_path)
-    
-    message("Table saved for outcome variable: ", outcome_var_name)
-  }, error = function(e) {
-    message("Error creating table for outcome variable: ", outcome_var_name)
-    message("Error message: ", e$message)
-  })
-}
-
-# Generate and save tables for all outcome variables
-for (outcome in outcome_var_names) {
-  create_and_save_regression_table(outcome)
-}
-
-# Multivariate linear regression using ab levels---------------------------------------------------------------------------------------
-# Define the function to run multivariate linear regression and create tables
-run_linear_regression_and_save_tables <- function(outcome_var_name) {
-  tryCatch({
-    # Define the formula for the linear regression model
-    formula <- as.formula(
-      paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
-    )
-    
-    # Fit the linear regression model
-    model <- lm(
-      formula,
-      data = coinfection_data
-    )
-    
-    # Create regression table
-    table <- tbl_regression(model)
-    
-    # Check if tbl_regression object is created
-    if (!inherits(table, "gtsummary")) {
-      stop("Failed to create gtsummary object.")
-    }
-    
-    # Save the table to HTML file
-    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Linear_Regression_Table_", outcome_var_name, ".html")
-    gtsummary::as_gt(table) %>% gt::gtsave(file = file_path)
-    
-    message("Table saved for outcome variable: ", outcome_var_name)
-  }, error = function(e) {
-    message("Error creating table for outcome variable: ", outcome_var_name)
-    message("Error message: ", e$message)
-  })
-}
-
-# Define the outcome variable names for linear regression 
-outcome_var_names <- names(coinfection_data)[27:35]
-
-# Generate and save tables for all outcome variables
-for (outcome in outcome_var_names) {
-  run_linear_regression_and_save_tables(outcome)
-}
-
-#Run both multivariate models considering age and site as confounders --------------------------------------
-
-#Multivariate Logistic Regression with Confounders
-run_multiple_logistic_regression_with_confounders <- function(outcome_var_name) {
-  tryCatch({
-    # Define the formula including confounders
-    formula <- as.formula(
-      paste(outcome_var_name, "~ age_cat + study_site +", paste(setdiff(names(explanatory_vars), c("age_cat", "study_site")), collapse = " + "))
-    )
-    
-    # Check if the formula is valid
-    print(paste("Fitting model for outcome:", outcome_var_name))
-    print(formula)
-    
-    model <- glm(
-      formula,
-      family = "binomial",
-      data = coinfection_data
-    )
-    
-    result <- broom::tidy(
-      model,
-      exponentiate = TRUE,
-      conf.int = TRUE
-    ) %>% 
-      mutate(outcome_var = outcome_var_name)
-    
-    return(result)
-  }, error = function(e) {
-    message("Error in model for outcome variable: ", outcome_var_name)
-    message("Error message: ", e$message)
-    return(NULL)  # Return NULL in case of error
-  })
-}
-
-# Run regression models outcome by outcome including confounders
-results_list <- list()
-
-for (outcome in names(outcome_vars)) {
-  print(paste("Running model for outcome:", outcome))
-  result <- run_multiple_logistic_regression_with_confounders(outcome)
-  if (!is.null(result)) {
-    results_list[[outcome]] <- result
-  }
-}
-
-multiple_logistic_results <- bind_rows(results_list, .id = "outcome_var")
-
-# Check if the results are created and non-empty
-if (nrow(multiple_logistic_results) > 0) {
-  print(multiple_logistic_results)
-  write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results_with_confounders.csv", row.names = FALSE)
-} else {
-  message("No results to save or there was an issue with the models.")
-}
-
-# Define the function to run multivariate logistic regression and create tables
-run_multiple_logistic_regression_and_save_tables_with_confounders <- function(outcome_var_name) {
-  tryCatch({
-    # Define the formula including confounders
-    formula <- as.formula(
-      paste(outcome_var_name, "~ age_cat + study_site +", paste(setdiff(names(explanatory_vars), c("age_cat", "study_site")), collapse = " + "))
-    )
-    
-    # Fit the logistic regression model
-    model <- glm(
-      formula,
-      family = "binomial",
-      data = coinfection_data
-    )
-    
-    # Create regression table
-    table <- tbl_regression(model, exponentiate = TRUE, conf.int = TRUE)
-    
-    # Check if tbl_regression object is created
-    if (!inherits(table, "gtsummary")) {
-      stop("Failed to create gtsummary object.")
-    }
-    
-    # Save the table to HTML file
-    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Logistic_Regression_Table_", outcome_var_name, "_with_confounders.html")
-    gtsummary::as_gt(table) %>% gt::gtsave(file = file_path)
-    
-    message("Table saved for outcome variable: ", outcome_var_name)
-  }, error = function(e) {
-    message("Error creating table for outcome variable: ", outcome_var_name)
-    message("Error message: ", e$message)
-  })
-}
-
-# Run regression models outcome by outcome including confounders and generate tables
-for (outcome in names(outcome_vars)) {
-  run_multiple_logistic_regression_and_save_tables_with_confounders(outcome)
-}
-
-#Multivariate Linear Regression with Confounders
-run_linear_regression_and_save_tables_with_confounders <- function(outcome_var_name) {
-  tryCatch({
-    # Define the formula including confounders
-    formula <- as.formula(
-      paste(outcome_var_name, "~ study_site +", paste(setdiff(names(explanatory_vars), c("age_cat", "study_site")), collapse = " + "))
-    )
-    
-    # Fit the linear regression model
-    model <- lm(
-      formula,
-      data = coinfection_data
-    )
-    
-    # Create regression table
-    table <- tbl_regression(model)
-    
-    # Check if tbl_regression object is created
-    if (!inherits(table, "gtsummary")) {
-      stop("Failed to create gtsummary object.")
-    }
-    
-    # Save the table to HTML file
-    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Linear_Regression_Table_", outcome_var_name, "_with_confounders.html")
-    gtsummary::as_gt(table) %>% gt::gtsave(file = file_path)
-    
-    message("Table saved for outcome variable: ", outcome_var_name)
-  }, error = function(e) {
-    message("Error creating table for outcome variable: ", outcome_var_name)
-    message("Error message: ", e$message)
-  })
-}
-
-# Define the outcome variable names for linear regression 
-linear_outcome_var_names <- names(coinfection_data)[27:35]
-
-# Generate and save tables for all outcome variables including confounders
-for (outcome in linear_outcome_var_names) {
-  run_linear_regression_and_save_tables_with_confounders(outcome)
-}
-
-
-
 
