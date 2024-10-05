@@ -31,6 +31,20 @@ coinfection_data <- coinfection_data %>%
     time_to_water == ">30_minutes" ~ ">30 minutes",
     TRUE ~ time_to_water # this ensures that other values remain unchanged
   ))
+
+
+unique (coinfection_data$water_contact)
+
+coinfection_data <- coinfection_data %>%   
+  mutate(water_contact = case_when(
+    water_contact %in% c("Never", "Rarely") ~ "Rarely",
+    water_contact == "Monthly" ~ "Unfrequently",
+    water_contact %in% c("Weekly", "Daily") ~ "Frequently",
+    TRUE ~ water_contact # this ensures that other values remain unchanged
+  ))
+
+
+coinfection_data <- na.omit(coinfection_data)
 # Select coinfection variable and covariates
 outcome_vars <- coinfection_data[, 56:59]  # Assuming columns 3 to 26 are outcomes for MFIs
 explanatory_vars <- coinfection_data[, 60:81]  # Assuming columns 60 to 81 are explanatory variables
@@ -75,7 +89,6 @@ explanatory_vars <- explanatory_vars %>%
     eat_soil = as.factor(eat_soil)
   )
 
-
 #Set baseline reference level for those variables with more than 2 factors (protective values)
 
 # Define the function to preprocess factor variables and set reference levels
@@ -90,7 +103,7 @@ preprocess_factors <- function(data) {
       net_used = relevel(as.factor(net_used), ref = "Every_night"),
       toilet_type = relevel(as.factor(toilet_type), ref = "Private_toilet"),
       wash_hands = relevel(as.factor(wash_hands), ref = "Water_and_soap"),
-      water_contact = relevel(as.factor(water_contact), ref = "Never"),
+      water_contact = relevel(as.factor(water_contact), ref = "Unfrequently"),
       water_source = relevel(as.factor(water_source), ref = "Private_source"),
       shoe_wearing = relevel(as.factor(shoe_wearing), ref = "Closed_shoes"),
       child_sex = relevel(as.factor(child_sex), ref = "Female"),
@@ -105,7 +118,6 @@ preprocess_factors <- function(data) {
       eat_soil = relevel(as.factor(eat_soil), ref = "No")
     )
 }
-
 # Preprocess the factor variables in the dataset
 coinfection_data <- preprocess_factors(coinfection_data)
 
@@ -148,18 +160,15 @@ write.csv(univar_results, file="C:/MALHelminth project/Paper1/MALHelminth_serolo
 
 # Multivariate regression ---------------------------------------------------------------------------------------
 
-# Using p-value cut-off of 0.1 to select covariates for multivariate analysis
-multi_covariates <- univar_results %>% 
-  filter(p.value <= 0.1) %>%
-  filter(term != "(Intercept)") 
+# Load necessary libraries
+library(broom)
+library(dplyr)
+library(MASS)  # For AIC-based model selection
 
-table(multi_covariates$term)
-
-#all covariates are below 0.1 for some outcomes so we will keep them all 
-
-#define function
+# Define function for AIC-based backward elimination and fitting logistic regression model
 run_multiple_logistic_regression <- function(outcome_var_name) {
   tryCatch({
+    # Construct the formula for logistic regression
     formula <- as.formula(
       paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
     )
@@ -168,20 +177,26 @@ run_multiple_logistic_regression <- function(outcome_var_name) {
     print(paste("Fitting model for outcome:", outcome_var_name))
     print(formula)
     
-    model <- glm(
+    # Fit the full logistic regression model
+    full_model <- glm(
       formula,
       family = "binomial",
       data = coinfection_data
     )
     
+    # Perform backward elimination using AIC
+    selected_model <- MASS::stepAIC(full_model, direction = "backward", trace = FALSE)
+    
+    # Tidy up the results (exponentiate to get odds ratios, include confidence intervals)
     result <- broom::tidy(
-      model,
+      selected_model,
       exponentiate = TRUE,
       conf.int = TRUE
-    ) %>% 
-      mutate(outcome_var = outcome_var_name)
+    ) %>%
+      mutate(outcome_var = outcome_var_name)  # Add outcome variable name for reference
     
     return(result)
+    
   }, error = function(e) {
     message("Error in model for outcome variable: ", outcome_var_name)
     message("Error message: ", e$message)
@@ -189,7 +204,7 @@ run_multiple_logistic_regression <- function(outcome_var_name) {
   })
 }
 
-#run regression models outcome by outcome 
+# Run regression models outcome by outcome
 
 results_list <- list()
 
@@ -201,53 +216,26 @@ for (outcome in outcome_var_names) {
   }
 }
 
+# Combine all the results into one data frame
 multiple_logistic_results <- bind_rows(results_list, .id = "outcome_var")
 
 # Check if the results are created and non-empty
 if (nrow(multiple_logistic_results) > 0) {
+  
+  # Holm-Bonferroni correction
+  # Sort p-values in increasing order and apply the Holm-Bonferroni correction
+  multiple_logistic_results <- multiple_logistic_results %>%
+    dplyr::mutate(rank = rank(p.value, ties.method = "first")) %>%  # Rank the p-values
+    dplyr::mutate(holm_pvalue = p.adjust(p.value, method = "holm")) # Apply Holm-Bonferroni correction
+  
+  # Remove the rank column if not needed
+  multiple_logistic_results <- dplyr::select(multiple_logistic_results, -rank)
+  
+  # Print and save the final results with corrected p-values
   print(multiple_logistic_results)
   write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results_coinfections_confounder.csv", row.names = FALSE)
+  
 } else {
   message("No results to save or there was an issue with the models.")
 }
 
-final_multivar_model %>% tbl_regression(exponentiate = T)
-
-# Function to create and save regression table for each model
-create_and_save_regression_table <- function(outcome_var_name) {
-  tryCatch({
-    # Define formula for the model
-    formula <- as.formula(
-      paste(outcome_var_name, "~ study_site +", paste(names(explanatory_vars), collapse = " + "))
-    )
-    
-    # Fit the logistic regression model
-    model <- glm(
-      formula,
-      family = "binomial",
-      data = coinfection_data
-    )
-    
-    # Create regression table
-    table <- tbl_regression(model)
-    
-    # Check if tbl_regression object is created
-    if (!inherits(table, "gtsummary")) {
-      stop("Failed to create gtsummary object.")
-    }
-    
-    # Save the table to HTML file
-    file_path <- paste0("C:/MALHelminth project/Paper1/MALHelminth_serology/Regression_coinfections_confounder_Table_", outcome_var_name, ".html")
-    gtsummary::as_gt(table) %>% gt::gtsave(file = file_path)
-    
-    message("Table saved for outcome variable: ", outcome_var_name)
-  }, error = function(e) {
-    message("Error creating table for outcome variable: ", outcome_var_name)
-    message("Error message: ", e$message)
-  })
-}
-
-# Generate and save tables for all outcome variables
-for (outcome in outcome_var_names) {
-  create_and_save_regression_table(outcome)
-}
