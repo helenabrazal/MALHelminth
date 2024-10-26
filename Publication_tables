@@ -2,7 +2,7 @@ setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 
 # Packages
 {library(pacman)
-  p_load(scales, ggplot2, tidyverse, dplyr, gtsummary, gt, labelled, haven, flextable)}
+  p_load(scales, ggplot2, tidyverse, dplyr, gtsummary, gt, labelled, haven, flextable, officer)}
 
 ## Data
 mergeData_coinfections_table <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections.csv")
@@ -10,56 +10,24 @@ mergeData_coinfections_table <- read.csv("C:/MALHelminth project/Paper1/MALHelmi
 
 ## Remove missing data for specified variables
 mergeData_coinfections_table <- mergeData_coinfections_table %>%
-  drop_na(Util_lavage_mains, Sexe, walking_time_water, Contact_with_water, ITNets_Use, type_toilettes)
+  filter(Sexe != "")
 
 ## Relabel values using original variable names
 mergeData_coinfections_table <- mergeData_coinfections_table %>%
   mutate(
-    Sexe = recode(Sexe, "F" = "Female", "M" = "Male"),
-    walking_time_water = recode(walking_time_water, 
-                                "<5minutes" = "<5 minutes", 
-                                "5to10minutes" = "5-10 minutes", 
-                                "10to14minutes" = "10-14 minutes",
-                                "15to30minutes" = "15-30 minutes", 
-                                ">30minutes" = ">30 minutes"),
-    Contact_with_water = recode(Contact_with_water, 
-                                "Every_day" = "Every day", 
-                                "Once_month" = "Once a month", 
-                                "Once_week" = "Once a week", 
-                                "rarely" = "Rarely", 
-                                "Jamais" = "Never"),
-    ITNets_Use = recode(ITNets_Use, "1to4timesAweek" = "1-4 times a week", "Evry_nigth" = "Every night", "rarely" = "Rarely", "jamais" = "Never"),
-    type_toilettes = recode(type_toilettes, 
-                            "1.Private" = "Private", 
-                            "2.Shared_with_families" = "Shared with families", 
-                            "3.Private_ext" = "Private exterior", 
-                            "4.Pit_latrines" = "Latrines", 
-                            "5.Others" = "Others", 
-                            "6.No_toilets" = "No toilet"),
-    Util_lavage_mains = recode(Util_lavage_mains, "1.Water_only" = "Wash with water only", "5.Soap_and_water" = "Wash with soap and water", "Others"="Others")
-    
+    Sexe = recode(Sexe, "F" = "Female", "M" = "Male")
   )
 
-## Set factor levels to ensure correct order in the table
-mergeData_coinfections_table <- mergeData_coinfections_table %>%
-  mutate(
-    walking_time_water = factor(walking_time_water, levels = c("<5 minutes", "5-10 minutes", "10-14 minutes", "15-30 minutes", ">30 minutes")),
-    Contact_with_water = factor(Contact_with_water, levels = c("Every day", "Once a week", "Once a month", "Rarely", "Never")),
-    ITNets_Use = factor(ITNets_Use, levels = c("Every night", "1-4 times a week", "Rarely", "Never")),
-    Util_lavage_mains= factor(Util_lavage_mains, levels=c("Wash with soap and water", "Wash with water only", "Others"))
-    )
-  
+table(mergeData_coinfections_table$Sexe)
+
+
+#Coinfections tables-------------------------------
 
 ## Rename variables
 mergeData_coinfections_table <- mergeData_coinfections_table %>%
   rename(
     Age_category = Age_cat,
-    Gender = Sexe,
-    Walking_time_from_water_source = walking_time_water,
-    Water_contact_frequency = Contact_with_water,
-    Hand_washing_habit = Util_lavage_mains,
-    ITN_use_frequency = ITNets_Use,
-    Type_of_toilet = type_toilettes,
+    Sex = Sexe,
     Cryptosporidium_positive = cryptosporidium_pos,
     Malaria_protection_positive = malaria_protect_pos,
     Taenia_positive = taenia_pos,
@@ -78,42 +46,44 @@ mergeData_coinfections_table <- mergeData_coinfections_table %>%
 # Relabel variables for labels
 var_label(mergeData_coinfections_table) <- list(
   Age_category = "Age category", 
-  Gender = "Gender", 
-  Walking_time_from_water_source = "Walking time from water source", 
-  Water_contact_frequency = "Water contact frequency", 
-  Hand_washing_habit = "Hand washing habit after using the toilet", 
-  ITN_use_frequency = "ITN use frequency",
-  Type_of_toilet = "Type of toilet",
-  Cryptosporidium_positive = "C.parvum exposure",
-  Taenia_positive = "T.solium exposure",
+  Sex = "Sex", 
+  Cryptosporidium_positive = "C. parvum exposure",
+  Taenia_positive = "T. solium exposure",
   Recent_malaria_positive = "Recent P. falciparum exposure" ,
-  Strongyloides_positive = "S.stercoralis exposure",
+  Strongyloides_positive = "S. stercoralis exposure",
   Historical_malaria_positive = "Historical P. falciparum exposure",
   Malaria_protection_positive = "P. falciparum seroprotection",
-  Schistosoma_positive = "S.mansoni exposure",
-  Necator_positive = "N.americanus exposure" ,
-  Giardia_positive = "G.lamblia  exposure" ,
+  Schistosoma_positive = "S. mansoni exposure",
+  Necator_positive = "N. americanus exposure" ,
+  Giardia_positive = "G. lamblia  exposure" ,
   Wash_malaria_coinfection = "WASH pathogens+P. falciparum exposure",
   STH_malaria_coinfection = "STH+P. falciparum  exposure",
   Protozoan_malaria_coinfection = "Intestinal protozoa+P. falciparum  exposure",
-  SCHISTO_malaria_coinfection = "S,mansoni+P. falciparum  exposure"
+  SCHISTO_malaria_coinfection = "S.mansoni+P. falciparum  exposure"
 )
 
 ###### Start generating tables 
 
 ### Demographic table (descriptive)
 
-table <- mergeData_coinfections_table %>% select(Age_category, Site, Gender, Walking_time_from_water_source, Water_contact_frequency, Hand_washing_habit, ITN_use_frequency, Type_of_toilet)
+table <- mergeData_coinfections_table %>% select(Age_category, Site, Sex)
 
-table %>% tbl_summary(
-  missing = "no",
-  statistic = list(
-    all_continuous() ~ "{mean} ({sd})",
-    all_categorical() ~ "{n} / {N} ({p}%)"
-  ),
-  digits = all_continuous() ~ 2
-)
+# Create the gtsummary table
+table_summ <- table %>% 
+  tbl_summary(
+    missing = "no",
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} / {N} ({p}%)"
+    ),
+    digits = all_continuous() ~ 2
+  )
 
+# Convert the gtsummary object to a flextable
+table_summ_flex <- as_flex_table(table_summ)
+
+# Save the flextable as a Word document
+flextable::save_as_docx(table_summ_flex, path = "table_summary.docx")
 ### Coinfections table
 table_coinf_age <- mergeData_coinfections_table %>% select(
   Age_category, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive, 
@@ -126,11 +96,9 @@ table_coinf_Site <- mergeData_coinfections_table %>% select(
 )
 
 #remove blank values from gender
-mergeData_coinfections_table <- mergeData_coinfections_table %>%
-  filter(Gender != "")
 
 table_coinf_sex<- mergeData_coinfections_table %>% select(
-  Gender, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive,
+  Sex, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive,
   Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
 )
 
@@ -171,6 +139,7 @@ summary_table_site <- table_coinf_Site %>%
     rows = 1:9
   )
 
+
 # Display the table
 summary_table_site
 
@@ -194,69 +163,140 @@ summary_table_sex <- table_coinf_sex %>%
 # Display the table
 summary_table_sex
 
-# Export the table to an HTML file
-gtsave(table_summ, "summary_table.html")
-gtsave(summary_table_site, "summary_table_site.html")
-gtsave(summary_table_age, "summary_table_age.html")
-gtsave(summary_table_sex, "summary_table_sex.html")
+# Create a new Word document
+# Initialize the document
+doc <- read_docx()
 
-#separate age and gender by site-------------------
+# Add summary tables to the document
+doc <- doc %>%
+  body_add_par("Summary Table by Age Category", style = "heading 1") %>%
+  body_add_flextable(summary_table_age_flex) %>%
+  body_add_par("Summary Table by Site", style = "heading 1") %>%
+  body_add_flextable(summary_table_site_flex) %>%
+  body_add_par("Summary Table by Sex", style = "heading 1") %>%
+  body_add_flextable(summary_table_sex_flex)
 
-# List of unique sites
-sites <- unique(mergeData_coinfections_table$Site)
+# Save the combined document
+print(doc, target = "combined_summary_tables.docx")
 
-# Function to create summary table for a given site
-create_summary_table <- function(data, by_var, group_var, group_labels, title) {
-  data %>%
-    tbl_summary(by = !!sym(by_var)) %>%
-    add_p(test = everything() ~ "t.test") %>%
-    add_overall() %>%
-    add_ci() %>%
-    # Adding spanning headers
-    as_gt() %>%
-    gt::tab_row_group(
-      group = group_labels[2],
-      rows = which(colnames(data) %in% group_var[2])
-    ) %>%
-    gt::tab_row_group(
-      group = group_labels[1],
-      rows = which(colnames(data) %in% group_var[1])
-    ) %>%
-    gt::tab_header(title = title)
-}
+###########################################################
+#Create tables summarising explanatory variables only--------------------------------------
 
-# Loop through each site and create tables for age and gender
-for (site in sites) {
-  # Filter data for the current site
-  site_data <- mergeData_coinfections_table %>% filter(Site == site)
-  
-  # Define columns for single and multiple pathogen exposures
-  single_exposures <- c("Cryptosporidium_positive", "Taenia_positive", "Strongyloides_positive", 
-                        "Historical_malaria_positive", "Malaria_protection_positive", "Recent_malaria_positive", 
-                        "Schistosoma_positive", "Necator_positive", "Giardia_positive")
-  multiple_exposures <- c("Wash_malaria_coinfection", "STH_malaria_coinfection", 
-                          "Protozoan_malaria_coinfection", "SCHISTO_malaria_coinfection")
-  
-  # Create summary tables
-  summary_table_age <- create_summary_table(
-    site_data %>% select(Age_category, all_of(single_exposures), all_of(multiple_exposures)),
-    "Age_category", list(single_exposures, multiple_exposures), 
-    c("Single pathogen exposure", "Multiple pathogen exposure"),
-    paste("IgG antibody levels by age for site", site)
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
+
+# Packages
+{library(pacman)
+  p_load(scales, ggplot2, tidyverse, dplyr, gtsummary, gt, labelled, haven, flextable, officer)}
+
+# Read in epi covariates
+covariate_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/covariate_data_complete.csv", stringsAsFactors = F)
+
+# Ensure dichotomous variables are factors
+covariate_data$electricity <- factor(covariate_data$electricity, levels = c("Yes", "No"))
+covariate_data$radio <- factor(covariate_data$radio, levels = c("Yes", "No"))
+covariate_data$motorbike <- factor(covariate_data$motorbike, levels = c("Yes", "No"))
+#recode variables with multiple correlation values as we did for logistic regression
+covariate_data <- covariate_data %>%   
+  mutate(time_to_water = case_when(
+    time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
+    time_to_water == "15-30_minutes" ~ "15-30 minutes",
+    time_to_water == ">30_minutes" ~ ">30 minutes",
+    TRUE ~ time_to_water # this ensures that other values remain unchanged
+  ))
+
+covariate_data <- covariate_data %>%   
+  mutate(water_contact = case_when(
+    water_contact %in% c("Never", "Rarely") ~ "Rarely",
+    water_contact == "Monthly" ~ "Unfrequently",
+    water_contact %in% c("Weekly", "Daily") ~ "Frequently",
+    TRUE ~ water_contact # this ensures that other values remain unchanged
+  ))
+
+
+
+#rename variables
+covariate_data <- covariate_data %>%
+  rename(
+    Age_category = age_cat,
+    Site = study_site,
+    Sex = child_sex,
   )
-  
-  summary_table_gender <- create_summary_table(
-    site_data %>% select(Gender, all_of(single_exposures), all_of(multiple_exposures)),
-    "Gender", list(single_exposures, multiple_exposures), 
-    c("Single pathogen exposure", "Multiple pathogen exposure"),
-    paste("IgG antibody levels by gender for site", site)
-  )
-  
-  # Display the tables
-  print(summary_table_age)
-  print(summary_table_gender)
-  
-  # Save the tables to HTML files
-  gtsave(summary_table_age, paste0("summary_table_age_site_", site, ".html"))
-  gtsave(summary_table_gender, paste0("summary_table_gender_site_", site, ".html"))
-}
+
+
+# Remove columns "Sample" and "more_than_one_net" from covariate_data as Sample is not an explanatory variables and more_than_one_net has high multicollinearity with other variables
+covariate_data <- covariate_data %>%
+  select(-Sample, -more_than_one_net)
+
+# Replace blank strings with NA across all columns
+covariate_data[covariate_data == ""] <- NA
+
+# Remove variations of "Unknown" (case insensitive and trim whitespace)
+covariate_data <- covariate_data %>%
+  mutate(across(everything(), ~ na_if(trimws(tolower(.)), "unknown")))  # Convert "unknown" to NA
+
+# Convert relevant columns to factors and drop unused levels
+covariate_data <- covariate_data %>%
+  mutate(across(c(house_material, net_holes, net_used, wash_hands, water_source, shoe_wearing, Sex, net_available,
+                  electricity, radio, motorbike, freq_wash_before_eat, time_to_water, eat_soil, hand_wash_area, space_between_walls), 
+                ~ factor(., exclude = NULL))) %>%
+  droplevels()  # Drop unused levels from all factor columns
+
+#relabel variables for table display
+var_label(covariate_data) <- list(
+  Age_category = "Age category", 
+  house_ownership = "House ownership", 
+  house_material = "House material",
+  net_holes = "Holes in net",
+  net_used = "Use of net" ,
+  toilet_type = "Toilet type",
+  wash_hands = "Handwashing practice",
+  water_contact = "Water contact",
+  water_source = "Water source",
+  shoe_wearing = "Shoe wearing" ,
+  electricity = "Electricity",
+  radio = "Radio",
+  motorbike = "Motorbike",
+  space_between_walls = "Space between walls",
+  net_available = "Net available",
+  hand_wash_area = "Handwashing area",
+  freq_wash_before_eat = "Frequency of handwashing before eating" ,
+  time_to_water = "Time to water",
+  eat_soil = "Eat soil"
+)
+
+# Create the summary table ensuring dichotomous variables are treated as categorical
+summary_table_explanatory <- covariate_data %>%
+  tbl_summary(
+    by = Site,
+    type = list(
+      electricity ~ "categorical",
+      radio ~ "categorical",
+      motorbike ~ "categorical",
+      space_between_walls~ "categorical",
+      net_available~ "categorical",
+      freq_wash_before_eat ~ "categorical",
+      time_to_water ~ "categorical",
+      hand_wash_area ~ "categorical",
+      eat_soil ~ "categorical",
+      net_holes ~ "categorical"
+      
+    )
+  ) %>%
+  add_overall() 
+
+
+# Display the summary table
+print(summary_table_explanatory)
+
+##Save into as a word document 
+
+# Convert gtsummary table to flextable
+summary_flextable <- as_flextable(summary_table_explanatory)
+
+# Initialize the document
+doc <- read_docx()
+
+# Add summary tables to the document
+doc <- doc %>%
+  body_add_par("Summary Table explanatory variables", style = "heading 1") %>%
+  body_add_flextable(summary_table_explanatory)
