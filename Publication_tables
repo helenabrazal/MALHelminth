@@ -264,6 +264,31 @@ var_label(covariate_data) <- list(
   eat_soil = "Eat soil"
 )
 
+# Reorder levels of variables in covariate_data
+covariate_data <- covariate_data %>%
+  mutate(
+    # Reorder levels for each variable as specified
+    net_holes = fct_relevel(net_holes, "yes", "no"),
+    net_used = fct_relevel(net_used, "every_night", "rarely", "never"),
+    toilet_type = fct_relevel(toilet_type, "private_toilet", "shared_toilet", "pit_latrine", "no_toilet"),
+    water_contact = fct_relevel(water_contact, "frequent", "infrequent", "rarely"),
+    electricity = fct_relevel(electricity, "yes", "no"),
+    radio = fct_relevel(radio, "yes", "no"),
+    space_between_walls = fct_relevel(space_between_walls, "yes", "no"),
+    net_available = fct_relevel(net_available, "yes", "no"),
+    hand_wash_area = fct_relevel(hand_wash_area, "yes", "no"),
+    freq_wash_before_eat = fct_relevel(freq_wash_before_eat, "always", "sometimes", "rarely", "never"),
+    time_to_water = fct_relevel(time_to_water, "<15 minutes", "15-30 minutes", ">30 minutes"),
+    eat_soil = fct_relevel(eat_soil, "yes", "no", "dont_know"),
+    motorbike = fct_relevel(motorbike, "yes", "no"),
+    water_contact = fct_relevel(water_contact, "frequently", "unfrequently", "rarely")
+    
+  )
+
+# Arrange columns alphabetically
+covariate_data <- covariate_data %>%
+  select(sort(names(.)))  # Select columns in alphabetical order
+
 # Create the summary table ensuring dichotomous variables are treated as categorical
 summary_table_explanatory <- covariate_data %>%
   tbl_summary(
@@ -289,14 +314,5 @@ summary_table_explanatory <- covariate_data %>%
 print(summary_table_explanatory)
 
 ##Save into as a word document 
-
-# Convert gtsummary table to flextable
-summary_flextable <- as_flextable(summary_table_explanatory)
-
-# Initialize the document
-doc <- read_docx()
-
-# Add summary tables to the document
-doc <- doc %>%
-  body_add_par("Summary Table explanatory variables", style = "heading 1") %>%
-  body_add_flextable(summary_table_explanatory)
+summary_table_explanatory_flex <- as_flex_table(summary_table_explanatory)
+flextable::save_as_docx(summary_table_explanatory_flex, path = "summary_table_explanatory.docx")
