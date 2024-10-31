@@ -14,53 +14,54 @@ mergeData <- mergeData[!is.na(mergeData$Sexe), ]
 
 mergeData <- mergeData %>%   
   mutate(Age_category = case_when(
-    age_an < 5 ~ " Preschool children (< 5)",
-    age_an > 4 ~ "School children(> 5)"  ))
+    age_an < 5 ~ " Preschool children (< 5 years)",
+    age_an > 4 ~ "School children (> 5 years)"  ))
 
+#rename sex variable
 mergeData <- mergeData %>%
   mutate(Gender = case_when(
     Sexe == "F" ~ "Female",
     Sexe == "M" ~ "Male",
   ))
 
-## Rename variables before plotting
+# Rename x axis variables before plotting
 mergeData <- mergeData %>%
   rename(
-    "C.parvum exposure" = cryptosporidium_pos,
+    "C. parvum exposure" = cryptosporidium_pos,
     "P. falciparum seroprotection" = malaria_protect_pos,
     "Recent P. falciparum exposure" = malaria_recent_pos,
-    "S.stercoralis exposure" = Strongyloides_pos,
+    "S. stercoralis exposure" = Strongyloides_pos,
     "Historical P. falciparum exposure"= malaria_historical_pos,
-    "S.mansoni exposure" = Smansoni_pos,
-    "N.americanus exposure" = necator_pos,
-    "T.solium exposure" = taenia_pos,
-    "G.lamblia  exposure" = giardia_pos,
-    "C.parvum" = cryptosporidium_MFI,
+    "S. mansoni exposure" = Smansoni_pos,
+    "N. americanus exposure" = necator_pos,
+    "T. solium exposure" = taenia_pos,
+    "G. lamblia  exposure" = giardia_pos,
+    "C. parvum" = cryptosporidium_MFI,
     "P. falciparum protection" = malaria_protect_MFI,
     "Recent P. falciparum" = malaria_recent_MFI,
-    "S.stercoralis" = Strongyloides_MFI,
+    "S. stercoralis" = Strongyloides_MFI,
     "Historical P. falciparum"= malaria_historical_MFI,
-    "S.mansoni" = Smansoni_MFI,
-    "N.americanus" = necator_MFI,
-    "T.solium" = taenia_MFI,
-    "G.lamblia" = giardia_MFI
+    "S. mansoni" = Smansoni_MFI,
+    "N. americanus" = necator_MFI,
+    "T. solium" = taenia_MFI,
+    "G. lamblia" = giardia_MFI
   )
 
 
-#########plot seroprevalences of single antigens##
+###############Plot seroprevalences of each pathogen type---------------------------------------------------------
 
-##create unique variable long format for plotting
+#create unique variable long format for plotting
 dataLong_pos <- mergeData%>% 
-  pivot_longer(cols = "C.parvum exposure":"G.lamblia  exposure") %>% 
+  pivot_longer(cols = "C. parvum exposure":"G. lamblia  exposure") %>% 
   rename("pos" = "value", "Pathogen"= "name")
 
-
+#remove missing values
 dataLong_pos <- dataLong_pos %>%
   filter(Age_category != "")%>%
   filter(Gender != "")%>%
   filter(Site != "")
 
-###plot seroprevalences by age###############
+##plot seroprevalences by age--------------------
 
 #calculate seroprevalences and 95% CI
 unique(dataLong_pos$Age_category)
@@ -97,7 +98,7 @@ pos_age <- ggplot(percentage_pos_age, aes(x = Pathogen, y = prop_1, fill = Age_c
 
 
 
-###plot seroprevalences by gender###############
+##plot seroprevalences by sex--------------------
 
 #calculate seroprevalences and 95% CI
 unique(dataLong_pos$Gender)
@@ -127,7 +128,7 @@ pos_gender <- ggplot(percentage_pos_gender, aes(x = Pathogen, y = prop_1, fill =
         title = element_text(face="bold", size = 15)) +
   ylim(0, 100)  # Set y-axis limits
 
-###plot seroprevalences by Site###############
+##plot seroprevalences by site--------------------
 
 #calculate seroprevalences and 95% CI
 unique(dataLong_pos$Site)
@@ -165,13 +166,14 @@ combined_plot_pos<-pos_age + pos_gender + pos_site +  plot_layout(nrow = 2, byro
 ggsave("pos_levels.png", combined_plot_pos, width = 22, height = 15, dpi = 300)
 
 
-##### Plot MFI Values #####
+###############Plot antigen levels (MFIs) of each pathogen type---------------------------------------------------------
+
+#transform single antigens to longer format for plotting
 pivot_longer(cols = "Cp17":"VSP3", names_to = "Antigen", values_to = "MFI") %>%
   filter(!is.na(Site) & Site != "" & !is.na(Gender) & Gender != "") %>%
   mutate(MFI = as.numeric(MFI))
 
-# Transform data
-
+#transform pathogen ab levels to longer format for plotting
 dataLong_summ <- mergeData %>%
   pivot_longer(cols = "C.parvum":"G.lamblia", names_to = "Pathogen", values_to = "MFI_sum") %>%
   filter(!is.na(Site) & Site != "" & !is.na(Gender) & Gender != "") %>%
@@ -193,7 +195,7 @@ plot_mfi <- function(data, fill_var, title) {
     labs(fill = fill_var)
 }
 
-# Generate plots
+## Generate plots--------------------------
 age_plots <- plot_mfi(dataLong_summ, "Age_category", "IgG antibody levels by age across sites")
 gender_plots <- plot_mfi(dataLong_summ, "Gender", "IgG antibody levels by gender assigned at birth across sites")
 
@@ -203,7 +205,7 @@ print(gender_plots)
 # Combine plots
 age_plots + gender_plots + plot_layout(nrow = 2, byrow = FALSE)
 
-# Define violin plot function
+# Define  plot function
 plot_box <- function(data, x_var, fill_var, title, show_x_labels = TRUE) {
   p <- ggplot(data, aes(x = !!sym(x_var), y = MFI_sum, fill = !!sym(fill_var))) +
     geom_boxplot(position = position_dodge(width = 0.7), width = 0.6, 
@@ -241,7 +243,7 @@ combined_plot_IgG<-age_box + gender_box + site_box+plot_layout(nrow = 3, byrow =
 ggsave("IgG_levels.png", combined_plot_IgG, width = 22, height = 15, dpi = 300)
 
 
-############create heatmaps with log MFI data distribution geographically
+###############Generate heat maps with levels of antibodies by village for each pathogen type (this will not be used in the publication but will help us to observe significant heterogeneicity---------------------------------------------------------
 
 # Filter out rows with "#N/A" in the "Site" variable
 # Filter out data
@@ -302,8 +304,8 @@ file_path <- "heatmap.png"
 
 # Save the heatmap as a high-resolution PNG file
 ggsave(filename = file_path, plot = heatmap, width = 12, height = 10, dpi = 300)
-###########Correlation matrix to see which ab levels correlate more
-
+#
+###############Correlation matrix to observe which antibody levels correlate---------------------------------------------------------
 library(Hmisc)
 # Select the relevant columns for plotting
 data_subset <- mergeData %>% select(28:35)
