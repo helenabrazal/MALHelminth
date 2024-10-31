@@ -15,11 +15,11 @@ mergeData <- mergeData[!is.na(mergeData$age_an), ]
 
 mergeData <- mergeData %>%   
   mutate(Age_cat = case_when(
-    age_an < 5 ~ " Preschool children (< 5)",
-    age_an > 4 ~ "School children(> 5)"  ))
+    age_an < 5 ~ " Preschool children (< 5 years)",
+    age_an > 4 ~ "School children (> 5 years)"  ))
 
 ###########################monoinfections#######################################
-###now create a new variable with infections with pathogen from same sources (exposure to 1 or more pathogens from that category)
+###now create a new variable with infections with pathogens from the same sources (exposure to 1 or more pathogens from that category)
 mergeData_coinfections <- mergeData %>%
   mutate(Wash = ifelse(cryptosporidium_pos + giardia_pos + taenia_pos+Smansoni_pos +necator_pos + Strongyloides_pos >= 1, 1, 0),
          Protozoan = ifelse(cryptosporidium_pos + giardia_pos>= 1, 1, 0),
