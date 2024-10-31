@@ -7,49 +7,43 @@ setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 
 # Packages
 {library(pacman)
-  p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, car, tidymodels, dotwhisker, tidyverse, gt,broom)}
+  p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, car, tidymodels, dotwhisker, tidyverse, gt, broom, reshape2)}
 
 # Read in full raw data to extract outcome data
 outcome_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections_only.csv", stringsAsFactors = F)
 
-# Read in epi covariates
+# Read in epi covariates to extract explanatory variables
 covariate_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/covariate_data_complete.csv", stringsAsFactors = F)
+
 
 # Bind outcome and covariate data
 coinfection_data <- outcome_data %>% 
   left_join(covariate_data, by = "Sample")
 
-coinfection_data <- na.omit(coinfection_data)
-
-#recode time_to_water to reduce levels
-unique (coinfection_data$time_to_water)
-
-coinfection_data <- coinfection_data %>%   
-  mutate(time_to_water = case_when(
-    time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
-    time_to_water == "15-30_minutes" ~ "15-30 minutes",
-    time_to_water == ">30_minutes" ~ ">30 minutes",
-    TRUE ~ time_to_water # this ensures that other values remain unchanged
-  ))
-
-
-unique (coinfection_data$water_contact)
-
-coinfection_data <- coinfection_data %>%   
-  mutate(water_contact = case_when(
-    water_contact %in% c("Never", "Rarely") ~ "Rarely",
-    water_contact == "Monthly" ~ "Unfrequently",
-    water_contact %in% c("Weekly", "Daily") ~ "Frequently",
-    TRUE ~ water_contact # this ensures that other values remain unchanged
-  ))
-
-
-coinfection_data <- na.omit(coinfection_data)
 # Select coinfection variable and covariates
-outcome_vars <- coinfection_data[, 56:59]  # Assuming columns 3 to 26 are outcomes for MFIs
-explanatory_vars <- coinfection_data[, 60:81]  # Assuming columns 60 to 81 are explanatory variables
+outcome_vars <- coinfection_data[, 56:59]  # As coexposure variables are in columns 56-58
+explanatory_vars <- coinfection_data[, 60:81]  # As columns 60 to 81 are explanatory variables
 
-#having more than one net seems to be very correlated with net available so we will remove more_than_one_net 
+#recode time_to_water and water_contact to reduce levels as some levels have very low sample size
+
+coinfection_data <- coinfection_data %>%
+  mutate(
+    time_to_water = case_when(
+      time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
+      time_to_water == "15-30_minutes" ~ "15-30 minutes",
+      time_to_water == ">30_minutes" ~ ">30 minutes",
+      TRUE ~ time_to_water
+    ),
+    water_contact = case_when(
+      water_contact %in% c("Never", "Rarely") ~ "Rarely",
+      water_contact == "Monthly" ~ "Unfrequently",
+      water_contact %in% c("Weekly", "Daily") ~ "Frequently",
+      TRUE ~ water_contact
+    )
+  ) %>%
+  na.omit()
+
+#having more than one net is correlated with net availability and it does not add much epidemiological value, so we will remove more_than_one_net from data frame
 explanatory_vars <- explanatory_vars %>% select(-more_than_one_net)
 
 # Prepare data ---------------------------------------------------------------------------------------
@@ -91,7 +85,6 @@ explanatory_vars <- explanatory_vars %>%
 
 #Set baseline reference level for those variables with more than 2 factors (protective values)
 
-# Define the function to preprocess factor variables and set reference levels
 preprocess_factors <- function(data) {
   data %>%
     mutate(
@@ -103,7 +96,7 @@ preprocess_factors <- function(data) {
       net_used = relevel(as.factor(net_used), ref = "Every_night"),
       toilet_type = relevel(as.factor(toilet_type), ref = "Private_toilet"),
       wash_hands = relevel(as.factor(wash_hands), ref = "Water_and_soap"),
-      water_contact = relevel(as.factor(water_contact), ref = "Unfrequently"),
+      water_contact = relevel(as.factor(water_contact), ref = "Rarely"),
       water_source = relevel(as.factor(water_source), ref = "Private_source"),
       shoe_wearing = relevel(as.factor(shoe_wearing), ref = "Closed_shoes"),
       child_sex = relevel(as.factor(child_sex), ref = "Female"),
@@ -111,13 +104,14 @@ preprocess_factors <- function(data) {
       radio = relevel(as.factor(radio), ref = "Yes"),
       motorbike = relevel(as.factor(motorbike), ref = "Yes"),
       space_between_walls = relevel(as.factor(space_between_walls), ref = "No"),
-      net_available = relevel(as.factor(net_available), ref = "No"),
-      hand_wash_area = relevel(as.factor(hand_wash_area), ref = "No"),
+      net_available = relevel(as.factor(net_available), ref = "Yes"),
+      hand_wash_area = relevel(as.factor(hand_wash_area), ref = "Yes"),
       freq_wash_before_eat = relevel(as.factor(freq_wash_before_eat), ref = "Always"),
       time_to_water = relevel(as.factor(time_to_water), ref = "<15 minutes"),
       eat_soil = relevel(as.factor(eat_soil), ref = "No")
     )
 }
+
 # Preprocess the factor variables in the dataset
 coinfection_data <- preprocess_factors(coinfection_data)
 
@@ -160,12 +154,9 @@ write.csv(univar_results, file="C:/MALHelminth project/Paper1/MALHelminth_serolo
 
 # Multivariate regression ---------------------------------------------------------------------------------------
 
-# Load necessary libraries
-library(broom)
-library(dplyr)
-library(MASS)  # For AIC-based model selection
+# Multivariate regression ---------------------------------------------------------------------------------------
 
-# Define function for AIC-based backward elimination and fitting logistic regression model
+#set multivariate regression model function including backward selection based on AIC 
 run_multiple_logistic_regression <- function(outcome_var_name) {
   tryCatch({
     # Construct the formula for logistic regression
@@ -173,9 +164,8 @@ run_multiple_logistic_regression <- function(outcome_var_name) {
       paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
     )
     
-    # Check if the formula is valid
+    # Print the formula for clarity
     print(paste("Fitting model for outcome:", outcome_var_name))
-    print(formula)
     
     # Fit the full logistic regression model
     full_model <- glm(
@@ -184,56 +174,59 @@ run_multiple_logistic_regression <- function(outcome_var_name) {
       data = coinfection_data
     )
     
-    # Perform backward elimination using AIC
+    # Perform backward selection based on AIC using MASS::stepAIC
     selected_model <- MASS::stepAIC(full_model, direction = "backward", trace = FALSE)
     
-    # Tidy up the results (exponentiate to get odds ratios, include confidence intervals)
+    # Tidy up the results
     result <- broom::tidy(
       selected_model,
-      exponentiate = TRUE,
-      conf.int = TRUE
-    ) %>%
-      mutate(outcome_var = outcome_var_name)  # Add outcome variable name for reference
+      exponentiate = TRUE,   # Exponentiate to get odds ratios
+      conf.int = TRUE        # Add confidence intervals
+    ) %>% 
+      dplyr::mutate(outcome_var = outcome_var_name)  # Add outcome variable for reference
     
-    return(result)
+    return(result)  # Return the tidy results
     
   }, error = function(e) {
+    # Handle errors by printing the message and returning NULL
     message("Error in model for outcome variable: ", outcome_var_name)
     message("Error message: ", e$message)
-    return(NULL)  # Return NULL in case of error
+    return(NULL)
   })
 }
 
-# Run regression models outcome by outcome
+# Run the logistic regression models for each outcome variable and apply multiple testing correction
 
 results_list <- list()
 
 for (outcome in outcome_var_names) {
   print(paste("Running model for outcome:", outcome))
   result <- run_multiple_logistic_regression(outcome)
+  
   if (!is.null(result)) {
-    results_list[[outcome]] <- result
+    results_list[[outcome]] <- result  # Add results to the list if successful
   }
 }
 
 # Combine all the results into one data frame
 multiple_logistic_results <- bind_rows(results_list, .id = "outcome_var")
 
-# Check if the results are created and non-empty
+# Check if any results exist
 if (nrow(multiple_logistic_results) > 0) {
   
   # Holm-Bonferroni correction
-  # Sort p-values in increasing order and apply the Holm-Bonferroni correction
-  multiple_logistic_results <- multiple_logistic_results %>%
-    dplyr::mutate(rank = rank(p.value, ties.method = "first")) %>%  # Rank the p-values
-    dplyr::mutate(holm_pvalue = p.adjust(p.value, method = "holm")) # Apply Holm-Bonferroni correction
+  # Sort the p-values in increasing order, and apply the Holm correction
   
-  # Remove the rank column if not needed
+  multiple_logistic_results <- multiple_logistic_results %>%
+    dplyr::mutate(rank = rank(p.value, ties.method = "first")) %>% # Rank the p-values
+    dplyr::mutate(holm_pvalue = p.adjust(p.value, method = "holm")) # Holm-Bonferroni correction
+  
+  # Remove the rank column if needed
   multiple_logistic_results <- dplyr::select(multiple_logistic_results, -rank)
   
-  # Print and save the final results with corrected p-values
+  # Print and save the results
   print(multiple_logistic_results)
-  write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results_coinfections_confounder.csv", row.names = FALSE)
+  write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_coexposure_results.csv", row.names = FALSE)
   
 } else {
   message("No results to save or there was an issue with the models.")
