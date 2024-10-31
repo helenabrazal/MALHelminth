@@ -85,7 +85,7 @@ lighten_colors <- alpha(colors, alpha = 0.75)  # Adjust alpha to make the colors
 pos_age <- ggplot(percentage_pos_age, aes(x = Pathogen, y = prop_1, fill = Age_category, label = sprintf("%.1f%%", prop_1))) +
   geom_bar(stat = "identity", position = position_dodge()) +
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
-  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 4) +
+  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 3.5) +
   labs(title = "Percentage of seropositive cases by age category",
        y = "Percentage of seropositive individuals") +
   scale_color_manual(values = lighten_colors) +
@@ -117,7 +117,7 @@ percentage_pos_gender <- dataLong_pos %>%
 pos_gender <- ggplot(percentage_pos_gender, aes(x = Pathogen, y = prop_1, fill = Gender, label = sprintf("%.1f%%", prop_1))) +
   geom_bar(stat = "identity", position = position_dodge()) +
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
-  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 4) +
+  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 3.5) +
   labs(title = "Percentage of seropositive cases by gender assigned at birth",
        y = "Percentage of seropositive individuals") +
   scale_color_manual(values = lighten_colors) +
@@ -147,7 +147,7 @@ percentage_pos_site <- dataLong_pos %>%
 pos_site <- ggplot(percentage_pos_site, aes(x = Pathogen, y = prop_1, fill = Site, label = sprintf("%.1f%%", prop_1))) +
   geom_bar(stat = "identity", position = position_dodge()) +
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci), position = position_dodge(width = 0.9), width = 0.25) +
-  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 4) +
+  geom_text(position = position_dodge(width = 0.9), vjust = -3.75, size = 3.5) +
   labs(title = "Percentage of seropositive cases by site",
        y = "Percentage of seropositive individuals",
        x = NULL) +
@@ -163,19 +163,19 @@ pos_site <- ggplot(percentage_pos_site, aes(x = Pathogen, y = prop_1, fill = Sit
 
 combined_plot_pos<-pos_age + pos_gender + pos_site +  plot_layout(nrow = 2, byrow = FALSE)
 
-ggsave("pos_levels.png", combined_plot_pos, width = 22, height = 15, dpi = 300)
+ggsave("pos_levels.png", plot = combined_plot_pos, width = 22, height = 15, dpi = 700)
 
 
 ###############Plot antigen levels (MFIs) of each pathogen type---------------------------------------------------------
 
-#transform single antigens to longer format for plotting
+#transform to longer format for plotting
 pivot_longer(cols = "Cp17":"VSP3", names_to = "Antigen", values_to = "MFI") %>%
   filter(!is.na(Site) & Site != "" & !is.na(Gender) & Gender != "") %>%
   mutate(MFI = as.numeric(MFI))
 
-#transform pathogen ab levels to longer format for plotting
+# create categories of pathogens
 dataLong_summ <- mergeData %>%
-  pivot_longer(cols = "C.parvum":"G.lamblia", names_to = "Pathogen", values_to = "MFI_sum") %>%
+  pivot_longer(cols = "C. parvum":"G. lamblia", names_to = "Pathogen", values_to = "MFI_sum") %>%
   filter(!is.na(Site) & Site != "" & !is.na(Gender) & Gender != "") %>%
   mutate(MFI_sum = as.numeric(MFI_sum))
 
@@ -240,8 +240,7 @@ site_box <- plot_box(dataLong_summ, "Pathogen", "Site", "IgG antibody levels by 
 # Combine plots
 combined_plot_IgG<-age_box + gender_box + site_box+plot_layout(nrow = 3, byrow = FALSE)
 
-ggsave("IgG_levels.png", combined_plot_IgG, width = 22, height = 15, dpi = 300)
-
+ggsave("IgG_levels.png", combined_plot_IgG, width = 22, height = 15, dpi = 650)
 
 ###############Generate heat maps with levels of antibodies by village for each pathogen type (this will not be used in the publication but will help us to observe significant heterogeneicity---------------------------------------------------------
 
@@ -345,17 +344,20 @@ plot_lower_triangle <- ggplot(data = cor_p_combined, aes(x = Var1, y = Var2, fil
   geom_tile(color = "white") +
   scale_fill_gradient2(midpoint = 0.5, mid = "#339999", high = "#003333", low = "white", limits = c(0, 1)) +  # Adjusted scale to 0-1
   geom_text(aes(label = round(Correlation, 2)), color = "black", size = 3) +  # Add correlation values
-  geom_text(aes(label = significance), color = "black", size = 5, vjust = -1) +  # Add stars for significance
+  geom_text(aes(label = significance), color = "black", size = 3, vjust = -1) +  # Add stars for significance
   theme_minimal() +
-  labs(title = "Pearson Correlation Matrix showing antibody levels correlation with Significance", 
-       x = "Antibody levels", 
-       y = "Antibody levels") +
+  labs(title = "Pearson Correlation Matrix showing antibody levels correlation with significance", 
+       x = "Log (10) Antibody MFI", 
+       y = "Log (10) Antibody MFI") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "bold"),  # Bold x-axis labels
         axis.text.y = element_text(hjust = 1, face = "bold"),  # Bold y-axis labels
-        axis.title.x = element_text(face = "bold", size = 12),  # Bold x-axis title
-        axis.title.y = element_text(face = "bold", size = 12),  # Bold y-axis title
-        plot.title = element_text(face = "bold", size = 14)) +
+        axis.title.x = element_text(face = "bold", size = 10),  # Bold x-axis title
+        axis.title.y = element_text(face = "bold", size = 10),  # Bold y-axis title
+        plot.title = element_text(face = "bold", size = 11)) +
   coord_fixed()
 
 # Plot in console
 plot_lower_triangle
+
+ggsave("correlation_matrix.png", plot_lower_triangle, width = 8, height = 8, dpi = 600)
+
