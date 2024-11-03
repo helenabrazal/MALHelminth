@@ -15,7 +15,7 @@ mergeData <- mergeData[!is.na(mergeData$Sexe), ]
 mergeData <- mergeData %>%   
   mutate(Age_category = case_when(
     age_an < 5 ~ " Preschool children (< 5 years)",
-    age_an > 4 ~ "School children (> 5 years)"  ))
+    age_an > 4 ~ "School children (\u2265 5 years)"  ))
 
 #rename sex variable
 mergeData <- mergeData %>%
