@@ -1,0 +1,57 @@
+setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
+
+# Packages
+{library(pacman)
+  p_load(scales, ggplot2, tidyverse, dplyr, fmsb)}
+
+# Data
+mergeData <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData.csv")
+
+###make age categories based on epidemiological risk factors (school vs preschool children)
+
+table(mergeData$age_an)
+
+mergeData <- mergeData[!is.na(mergeData$age_an), ]
+
+mergeData <- mergeData %>%   
+  mutate(Age_category = case_when(
+    age_an <= 5 ~ "Preschool children (\u2264 5 years)",
+    age_an > 5 ~ "School children ( >5 years)"  ))
+
+###########################monoinfections#######################################
+###now create a new variable with infections with pathogen from same sources (exposure to 1 or more pathogens from that category)
+mergeData_coinfections <- mergeData %>%
+  mutate(Wash = ifelse(cryptosporidium_pos + giardia_pos + taenia_pos+Smansoni_pos +necator_pos + Strongyloides_pos >= 1, 1, 0),
+         Protozoan = ifelse(cryptosporidium_pos + giardia_pos>= 1, 1, 0),
+         Helminths = ifelse(taenia_pos+Smansoni_pos +necator_pos + Strongyloides_pos >= 1, 1, 0),
+         malaria = ifelse( malaria_historical_pos + malaria_recent_pos + malaria_protect_pos>= 1, 1, 0))
+
+
+###########################multiinfections#######################################
+####counts of sum of historical infections from different sources vs counts of people 
+mergeData_coinfections <- mergeData_coinfections %>%
+  mutate(number_infections = Helminths + Protozoan + malaria)
+
+
+ggplot(mergeData_coinfections, aes(x = number_infections)) +
+  # Create a histogram with count on y-axis
+  geom_histogram(stat = "count", fill = "skyblue", color = "black") +
+  # Add text labels for counts on top of bars
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +
+  # Add labels and title
+  labs(x = "Number of historical infections with different pathogen types", y = "Count", title = "Count of hosts with x number of different historical infections") +
+  # Customize theme
+  theme_minimal() +
+  # Explicitly include breaks for numbers 1 to 6 on the x-axis
+  scale_x_continuous(breaks = 0:6)
+
+
+###now create a new variable with coinfections with pathogen from different sources (if sum of both categories=2 there is a "coinfection")
+
+mergeData_coinfections <- mergeData_coinfections %>%
+  mutate(Wash_malaria_coinf = ifelse(Wash + malaria >= 2, 1, 0),
+         Helminth_malaria_coinf = ifelse(Helminths + malaria >= 2, 1, 0),
+         Protozoan_malaria_coinf = ifelse(Protozoan + malaria >= 2, 1, 0))
+
+write.csv(mergeData_coinfections, "C:/MALHelminth project/Paper1/mergeData_coinfections.csv", row.names = F)
+
