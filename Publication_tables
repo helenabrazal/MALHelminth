@@ -4,21 +4,23 @@ setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 {library(pacman)
   p_load(scales, ggplot2, tidyverse, dplyr, gtsummary, gt, labelled, haven, flextable, officer)}
 
-## Data
-mergeData_coinfections_table <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData_coinfections.csv")
+## Data (file dependent on file generated on coinfections plot script)
+mergeData_coinfections_table <- read.csv("C:/MALHelminth project/Paper1/mergeData_coinfections.csv")
 
 
 ## Remove missing data for specified variables
 mergeData_coinfections_table <- mergeData_coinfections_table %>%
   filter(Sexe != "")
 
+
+
+table(mergeData_coinfections_table$Sexe)
+
 ## Relabel values using original variable names
 mergeData_coinfections_table <- mergeData_coinfections_table %>%
   mutate(
-    Sexe = recode(Sexe, "F" = "Female", "M" = "Male")
+    Sexe = forcats::fct_recode(Sexe, "Female" = "F", "Male" = "M")
   )
-
-table(mergeData_coinfections_table$Sexe)
 
 
 #Coinfections tables-------------------------------
@@ -26,7 +28,7 @@ table(mergeData_coinfections_table$Sexe)
 ## Rename variables
 mergeData_coinfections_table <- mergeData_coinfections_table %>%
   rename(
-    Age_category = Age_cat,
+    Age_category = Age_category,
     Sex = Sexe,
     Cryptosporidium_positive = cryptosporidium_pos,
     Malaria_protection_positive = malaria_protect_pos,
@@ -38,9 +40,8 @@ mergeData_coinfections_table <- mergeData_coinfections_table %>%
     Necator_positive = necator_pos,
     Giardia_positive = giardia_pos,
     Wash_malaria_coinfection = Wash_malaria_coinf,
-    STH_malaria_coinfection = STH_malaria_coinf,
+    Helminth_malaria_coinf = Helminth_malaria_coinf,
     Protozoan_malaria_coinfection = Protozoan_malaria_coinf,
-    SCHISTO_malaria_coinfection = SCHISTO_malaria_coinf
   )
 
 # Relabel variables for labels
@@ -57,10 +58,10 @@ var_label(mergeData_coinfections_table) <- list(
   Necator_positive = "N. americanus exposure" ,
   Giardia_positive = "G. lamblia  exposure" ,
   Wash_malaria_coinfection = "WASH pathogens+P. falciparum exposure",
-  STH_malaria_coinfection = "STH+P. falciparum  exposure",
-  Protozoan_malaria_coinfection = "Intestinal protozoa+P. falciparum  exposure",
-  SCHISTO_malaria_coinfection = "S.mansoni+P. falciparum  exposure"
+  Helminth_malaria_coinf = "Helminths+P. falciparum  exposure",
+  Protozoan_malaria_coinfection = "Intestinal protozoa+P. falciparum  exposure"
 )
+
 
 ###### Start generating tables 
 
@@ -84,22 +85,22 @@ table_summ_flex <- as_flex_table(table_summ)
 
 # Save the flextable as a Word document
 flextable::save_as_docx(table_summ_flex, path = "table_summary.docx")
+
 ### Coinfections table
 table_coinf_age <- mergeData_coinfections_table %>% select(
   Age_category, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive, 
-  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
+  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, Helminth_malaria_coinf, Protozoan_malaria_coinfection
 )
 
 table_coinf_Site <- mergeData_coinfections_table %>% select(
   Site, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive,
-  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
+  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, Helminth_malaria_coinf, Protozoan_malaria_coinfection
 )
 
-#remove blank values from gender
 
 table_coinf_sex<- mergeData_coinfections_table %>% select(
   Sex, Cryptosporidium_positive, Taenia_positive, Strongyloides_positive, Historical_malaria_positive, Malaria_protection_positive, Recent_malaria_positive,
-  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, STH_malaria_coinfection, Protozoan_malaria_coinfection, SCHISTO_malaria_coinfection
+  Schistosoma_positive, Necator_positive, Giardia_positive, Wash_malaria_coinfection, Helminth_malaria_coinf, Protozoan_malaria_coinfection
 )
 
 # Create the summary table and add p-values using t-test
@@ -107,68 +108,34 @@ summary_table_age <- table_coinf_age %>%
   tbl_summary(by = Age_category) %>%
   add_p(test = everything() ~ "t.test") %>%
   add_overall() %>%
-  add_ci() %>%
-  # Adding spanning header
-  as_gt() %>%
-  gt::tab_row_group(
-    group = "Multiple pathogen exposure",
-    rows = 10:13
-  ) %>%
-  gt::tab_row_group(
-    group = "Single pathogen exposure",
-    rows = 1:9
-  )
+  add_ci()
 
-# Display the table
-summary_table_age
-
-# Create the summary table and add p-values using t-test
 summary_table_site <- table_coinf_Site %>%
   tbl_summary(by = Site) %>%
   add_p(test = everything() ~ "t.test") %>%
   add_overall() %>%
-  add_ci() %>%
-  # Adding spanning header
-  as_gt() %>%
-  gt::tab_row_group(
-    group = "Multiple pathogen exposure",
-    rows = 10:13
-  ) %>%
-  gt::tab_row_group(
-    group = "Single pathogen exposure",
-    rows = 1:9
-  )
+  add_ci()
 
-
-# Display the table
-summary_table_site
-
-# Create the summary table and add p-values using t-test
 summary_table_sex <- table_coinf_sex %>%
-  tbl_summary(by = Gender) %>%
+  tbl_summary(by = Sex) %>%
   add_p(test = everything() ~ "t.test") %>%
   add_overall() %>%
-  add_ci() %>%
-  # Adding spanning header
-  as_gt() %>%
-  gt::tab_row_group(
-    group = "Multiple pathogen exposure",
-    rows = 10:13
-  ) %>%
-  gt::tab_row_group(
-    group = "Single pathogen exposure",
-    rows = 1:9
-  )
+  add_ci()
 
-# Display the table
-summary_table_sex
+
+#create flex tables
+summary_table_age_flex <- as_flex_table(summary_table_age)
+summary_table_site_flex <- as_flex_table(summary_table_site)
+summary_table_sex_flex <- as_flex_table(summary_table_sex)
+
 
 # Create a new Word document
 # Initialize the document
 doc <- read_docx()
 
 # Add summary tables to the document
-doc <- doc %>%
+# Create and save Word document
+doc <- read_docx() %>%
   body_add_par("Summary Table by Age Category", style = "heading 1") %>%
   body_add_flextable(summary_table_age_flex) %>%
   body_add_par("Summary Table by Site", style = "heading 1") %>%
@@ -176,8 +143,9 @@ doc <- doc %>%
   body_add_par("Summary Table by Sex", style = "heading 1") %>%
   body_add_flextable(summary_table_sex_flex)
 
-# Save the combined document
-print(doc, target = "combined_summary_tables.docx")
+# Save the Word document
+print(doc, target = "summary_tables.docx")
+
 
 ###########################################################
 #Create tables summarising explanatory variables only--------------------------------------
@@ -217,7 +185,7 @@ covariate_data <- covariate_data %>%
 #rename variables
 covariate_data <- covariate_data %>%
   rename(
-    Age_category = age_cat,
+    Age_category = Age_category,
     Site = study_site,
     Sex = child_sex,
   )
@@ -316,3 +284,6 @@ print(summary_table_explanatory)
 ##Save into as a word document 
 summary_table_explanatory_flex <- as_flex_table(summary_table_explanatory)
 flextable::save_as_docx(summary_table_explanatory_flex, path = "summary_table_explanatory.docx")
+
+
+
