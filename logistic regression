@@ -7,240 +7,285 @@ setwd("C:/MALHelminth project/Paper1/MALHelminth_serology")
 
 # Packages
 {library(pacman)
-p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, tidymodels, dotwhisker, tidyverse)}
+  p_load(scales, gridExtra, gtsummary, flextable, RColorBrewer, GGally, car, tidymodels, dotwhisker, tidyverse, gt, broom, reshape2)}
 
 # Read in full raw data to extract outcome data
-outcome_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/mergeData.csv", stringsAsFactors = F)
+outcome_data <- read.csv("C:/MALHelminth project/Paper1/mergeData_coinfections_only.csv", stringsAsFactors = F)
 
-# Read in epi covariates
+# Read in epi covariates to extract explanatory variables
 covariate_data <- read.csv("C:/MALHelminth project/Paper1/MALHelminth_serology/covariate_data_complete.csv", stringsAsFactors = F)
-
 
 # Bind outcome and covariate data
 coinfection_data <- outcome_data %>% 
   left_join(covariate_data, by = "Sample")
 
-# Descriptive tables ---------------------------------------------------------------------------------------
-
 # Select coinfection variable and covariates
-desc_table <- coinfection_data %>% select(-c(1:18))
+outcome_vars <- coinfection_data[, 36:47]  # As seropositivity (binary) data are in columns 36 to 44
+explanatory_vars <- coinfection_data[, 48:69]  # As columns 60 to 81 are explanatory variables
 
-# Create factored coinfection variable
-desc_table$coinf_level <- factor(desc_table$mal_helm_coinf, 
-                                 levels = c(0, 1),
-                                 labels = c("Yes", "No"))
-  
+#recode time_to_water and water_contact to reduce levels as some levels have very low sample size
 
-desc_table %>% 
-  select(-c(mal_helm_coinf, id_consent)) %>% 
-  tbl_summary(by = coinf_level,
-              statistic = ~ "{n}/{N} ({p}%)",
-              missing = "no") %>% 
-  add_overall() %>%  
-  add_p() %>% 
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**Coinfection status**") %>% 
-  modify_caption("**Table 1. Coinfected vs non coinfected participants**")
-
-# Univariate logistic regression ---------------------------------------------------------------------------
-
-# Create vector of covariates 
-uni_covariates <- names(covariate_data) 
-
-# Drop "Sample"
-uni_covariates <- setdiff(uni_covariates, "Sample")
-
-# Set the baseline level for 'age group' and 'time to water'
-coinfection_data <- coinfection_data %>% 
-  mutate(age_cat = fct_relevel(age_cat, "1-7yrs", after = 0),
-         time_to_water = fct_relevel(time_to_water, "<5_minutes", after = 0))
-
-# Loop a univariate models for each covariate
-univar_models <- uni_covariates %>% 
-  str_c("mal_helm_coinf ~ ", .) %>% # combine each variable into formula 
-  map(
-    .f = ~glm( # pass formulas above one-by-one to glm
-      formula = as.formula(.x), # specify formula
-      family = "binomial", # type of glm
-      data = coinfection_data, # data
-    )
-  ) %>% 
-  map(
-    .f = ~tidy(
-      .x,
-      exponentiate = TRUE, # exponentiate coefficients
-      conf.int = TRUE
-    )
-  ) %>% 
-  bind_rows() %>% # collapse list of outputs into single data frame
-  mutate(across(where(is.numeric), round, digits = 2))
-
-# Loop univariate models and add cross tabulation of responses
-univar_models_tab <- uni_covariates %>% 
-  map(
-    .f = ~{
-      coinfection_data %>% 
-        group_by(mal_helm_coinf) %>% # group by outcome
-        count(.data[[.x]]) %>% # add counts of outcome
-        pivot_wider(
-          names_from = mal_helm_coinf, 
-          values_from = n) %>% 
-        drop_na(.data[[.x]]) %>% 
-        rename("variable" = .x) %>% 
-        mutate(variable = as.character(variable))
-    }
-  ) %>% 
-  bind_rows() %>% # collapse list of count outputs into single data frame
-  bind_cols(., univar_models) %>% # bind regression outputs
-  select(term, 2:3, estimate, conf.low, conf.high, p.value) %>% 
-  mutate(across(where(is.numeric), round, digits = 2)) %>% 
-  rename_with(~str_to_title(.), everything()) %>% 
-  rename("Yes" = "0",
-         "No" = "1")
-
-# Regression table output
-univar_table <- flextable(univar_models_tab)
-
-# Formatting flextable
-univar_table <- color(univar_table, i = ~ P.value < 0.1, j = "P.value", color = "red")
-univar_table <- bold(univar_table, part = "header", bold = TRUE)
-
-univar_table <- add_header_row(univar_table, values = c("", "Coinfected", ""), colwidths = c(1,2,4))
-univar_table <- align(univar_table, part = "header", align = "center")
-univar_table <- theme_vanilla(univar_table)
-univar_table
-
-
-# Using p-value cut-off of 0.1 to select covariates for multivariate analysis
-multi_covariates <- univar_models_tab %>% filter(P.value <= 0.1) 
-
-multi_covariates <- c("age_cat", "child_sex", "study_site", # fixed covariates
-                      "house_material", "net_holes", "net_used", "toilet_type", "wash_hands",
-                      "water_contact","electricity", "radio", "space_between_walls",
-                      "hand_wash_area", "freq_wash_before_eat", "time_to_water")
-
-
-# Multivariable logistic regression ------------------------------------------------------------------------
-
-# Build multivariable model
-multivar_model <- multi_covariates %>% 
-  str_c(collapse = "+") %>% 
-  str_c("mal_helm_coinf ~ ", .) %>% 
-  glm(family = "binomial",
-      data = coinfection_data)
-
-# Select final multivariable model based on AIC using forward selection
-final_multivar_model <- multivar_model %>% 
-  stats::step(direction = "forward",
-              trace = FALSE)
-
-# Pass model output to tidy to exponentiate the log odds and CIs
-final_model_output <- final_multivar_model %>% 
-  broom::tidy(exponentiate = TRUE,
-              conf.int = TRUE) %>% 
-  mutate(across(where(is.numeric), round, digits = 2))
- 
-
-# Model output table
-final_multivar_model %>% tbl_regression(exponentiate = T)
-
-
-# Linear regression ---------------------------------------------------------------------------
-
-# Using p-value cut-off of 0.1 to select covariates for multivariate analysis
-multi_covariates <- c("age_cat", "child_sex", "study_site", # fixed covariates
-                      "house_material", "net_holes", "net_used", "toilet_type", "wash_hands",
-                      "water_contact", "water_source","electricity", "radio", "space_between_walls",
-                      "hand_wash_area", "time_to_water")
-
-
-
-# Build multivariable model
-multivar_lin_model <- multi_covariates %>% 
-  str_c(collapse = "+") %>% 
-  str_c("Cryptosporidium_MFI ~ ", .) %>% 
-  lm(data = coinfection_data)
-
-# Select final multivariable model based on AIC using forward selection
-final_multivar_lin_model <- multivar_lin_model %>% 
-  stats::step(direction = "forward",
-              trace = FALSE)
-
-# Pass model output to tidy to exponentiate the log odds and CIs
-final_lin_model_output <- final_multivar_lin_model %>% 
-  broom::tidy(exponentiate = TRUE,
-              conf.int = TRUE) %>% 
-  mutate(across(where(is.numeric), round, digits = 2))
-
-
-# Model output table
-final_multivar_lin_model %>% tbl_regression()
-
-
-
-
-# Alt method -------------------------------------------------------------------------------------------------
-
-
-# Write vector of all newly coded covariates
-covariates <- c()
-
-
-test <- mergeData %>% 
-  select(PfAMA1_mEX, age_an, sexe_enfant, ethnique_enfant) %>% 
-  drop_na()
-
-
-model1 <- glm(PfAMA1_mEX ~ age_an + sexe_enfant + ethnique_enfant,
-              data = test,
-              family = binomial)
-
-# Look at model output
-anova(model1) 
-summary(model1) 
-
-
-# Tidymodels
-
-# recode covariates into sensible levels
-test <- test %>% 
+coinfection_data <- coinfection_data %>%
   mutate(
-    age_gp = case_when(
-      age_an <= 5 ~ 0,
-      age_an > 5 ~ 1,
-      TRUE ~ NA),
-    sexe_enfant = case_when(
-      sexe_enfant == 1 ~ 1,
-      sexe_enfant == 2 ~ 0,
-      TRUE ~ NA))
-
-# make variables a factor
-test$PfAMA1_mEX <- factor(test$PfAMA1_mEX, levels = c(0,1))
-#test$age_an <- factor(test$age_an, levels = c(0,1))
-#test$sexe_enfant <- factor(test$sexe_enfant, levels = c(0,1))
-test$ethnique_enfant <- factor(test$ethnique_enfant, levels = c(1,2,3,4,9))
-
-# specify model type 
-model <- logistic_reg() %>% set_engine("glm")
-
-# specify role of covariates
-rec <- recipe(PfAMA1_mEX ~ age_an + sexe_enfant + ethnique_enfant, data = test)
-
-# combine first two steps into model development workflow
-model_workflow <- workflow() %>% 
-  add_model(model) %>% 
-  add_recipe(rec)
+    time_to_water = case_when(
+      time_to_water %in% c("<5_minutes", "5-10_minutes", "10-14_minutes") ~ "<15 minutes",
+      time_to_water == "15-30_minutes" ~ "15-30 minutes",
+      time_to_water == ">30_minutes" ~ ">30 minutes",
+      TRUE ~ time_to_water
+    ),
+    water_contact = case_when(
+      water_contact %in% c("Never", "Rarely") ~ "Rarely",
+      water_contact == "Monthly" ~ "Unfrequently",
+      water_contact %in% c("Weekly", "Daily") ~ "Frequently",
+      TRUE ~ water_contact
+    )
+  ) %>%
+  na.omit()
 
 
-# fit model to the data
-model_fit <- model_workflow %>% 
-  fit(data = test)
+#Check pairwise correlation between explanatory vars----------------------
+# Function to calculate Cramér's V between explanatory variables
+cramers_v <- function(x, y) {
+  tbl <- table(x, y)
+  chi2 <- chisq.test(tbl, correct=FALSE)$statistic
+  n <- sum(tbl)
+  phi2 <- chi2/n
+  k <- min(nrow(tbl), ncol(tbl))
+  sqrt(phi2 / k)
+}
 
-# examine relationship between outcome and predictors
-tidy(model_fit,
-     exponentiate = TRUE,
-     conf.int = TRUE)
+# Prepare an empty matrix to store Cramér's V values
+var_names <- names(explanatory_vars)
+n_vars <- length(var_names)
+cramers_v_matrix <- matrix(NA, n_vars, n_vars, dimnames = list(var_names, var_names))
 
-tidy(model_fit) %>% 
-  dwplot(dot_args = list(size = 2, color = "black"),
-         whisker_args = list(color = "black"),
-         vline = geom_vline(xintercept = 1, colour = "grey50", linetype = 2))
+# Matrix to store significance of correlations
+significance_matrix <- matrix(NA, n_vars, n_vars, dimnames = list(var_names, var_names))
+
+# Calculate Cramér's V and significance for each pair of variables
+for (i in 1:n_vars) {
+  for (j in 1:n_vars) {
+    if (i == j) {
+      cramers_v_matrix[i, j] <- 1  # Diagonal
+      significance_matrix[i, j] <- NA
+    } else {
+      tbl <- table(explanatory_vars[[i]], explanatory_vars[[j]])
+      chi_test <- chisq.test(tbl, correct=FALSE)
+      p_value <- chi_test$p.value
+      significance_matrix[i, j] <- p_value
+      if (p_value < 0.05) {  # Change this threshold if needed
+        cramers_v_matrix[i, j] <- cramers_v(explanatory_vars[[i]], explanatory_vars[[j]])
+      } else {
+        cramers_v_matrix[i, j] <- NA
+      }
+    }
+  }
+}
+
+# Convert the matrix to a data frame for better readability
+cramers_v_df <- as.data.frame(cramers_v_matrix)
+
+# Convert the Cramér's V matrix to long format for ggplot2
+cramers_v_long <- melt(cramers_v_matrix, na.rm = TRUE)
+
+# Plot the heatmap showing correlation between discrete variables
+ggplot(cramers_v_long, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0.5, limit = c(0, 1), space = "Lab", 
+                       name="Cramér's V") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Cramér's V Correlation Matrix (Significant Correlations Only)",
+       x = "Variables", y = "Variables")
+
+#having more than one net is correlated with net availability and it does not add much epidemiological value, so we will remove more_than_one_net from data frame
+explanatory_vars <- explanatory_vars %>% select(-more_than_one_net)
+
+# Univariate regression ---------------------------------------------------------------------------------------
+#combine outcome and explanatory vars
+# Get outcome variable names
+outcome_var_names <- names(outcome_vars)
+
+# Get explanatory variable names
+explanatory_var_names <- names(explanatory_vars)
+# Define outcome variables
+
+#Check if factor and define reference factor before regression
+# Update this list based on the variables you expect to be factors
+explanatory_vars <- explanatory_vars %>%
+  mutate(
+    Age_category = as.factor(Age_category),
+    study_site = as.factor(study_site),
+    house_ownership = as.factor(house_ownership),
+    house_material = as.factor(house_material),
+    net_holes = as.factor(net_holes),
+    net_used = as.factor(net_used),
+    toilet_type = as.factor(toilet_type),
+    wash_hands = as.factor(wash_hands),
+    water_contact = as.factor(water_contact),
+    water_source = as.factor(water_source),
+    shoe_wearing = as.factor(shoe_wearing),
+    child_sex = as.factor(child_sex),
+    electricity = as.factor(electricity),
+    radio = as.factor(radio),
+    motorbike = as.factor(motorbike),
+    space_between_walls = as.factor(space_between_walls),
+    net_available = as.factor(net_available),
+    hand_wash_area = as.factor(hand_wash_area),
+    freq_wash_before_eat = as.factor(freq_wash_before_eat),
+    time_to_water = as.factor(time_to_water),
+    eat_soil = as.factor(eat_soil)
+  )
+
+
+#Set baseline reference level for those variables with more than 2 factors (protective values)
+
+# Define the function to preprocess factor variables and set reference levels. I will set as reference variables thought to be protective to make results interpretation easier
+preprocess_factors <- function(data) {
+  data %>%
+    mutate(
+      Age_category = relevel(as.factor(Age_category), ref = " Preschool children (<= 5 years)"),
+      study_site = relevel(as.factor(study_site), ref = "Diourbel"),
+      house_ownership = relevel(as.factor(house_ownership), ref = "Own_house"),
+      house_material = relevel(as.factor(house_material), ref = "Cement"),
+      net_holes = relevel(as.factor(net_holes), ref = "No"),
+      net_used = relevel(as.factor(net_used), ref = "Every_night"),
+      toilet_type = relevel(as.factor(toilet_type), ref = "Private_toilet"),
+      wash_hands = relevel(as.factor(wash_hands), ref = "Water_and_soap"),
+      water_contact = relevel(as.factor(water_contact), ref = "Rarely"),
+      water_source = relevel(as.factor(water_source), ref = "Private_source"),
+      shoe_wearing = relevel(as.factor(shoe_wearing), ref = "Closed_shoes"),
+      child_sex = relevel(as.factor(child_sex), ref = "Female"),
+      electricity = relevel(as.factor(electricity), ref = "Yes"),
+      radio = relevel(as.factor(radio), ref = "Yes"),
+      motorbike = relevel(as.factor(motorbike), ref = "Yes"),
+      space_between_walls = relevel(as.factor(space_between_walls), ref = "No"),
+      net_available = relevel(as.factor(net_available), ref = "Yes"),
+      hand_wash_area = relevel(as.factor(hand_wash_area), ref = "Yes"),
+      freq_wash_before_eat = relevel(as.factor(freq_wash_before_eat), ref = "Always"),
+      time_to_water = relevel(as.factor(time_to_water), ref = "<15 minutes"),
+      eat_soil = relevel(as.factor(eat_soil), ref = "No")
+    )
+}
+
+# Preprocess the factor variables in the dataset
+coinfection_data <- preprocess_factors(coinfection_data)
+
+# Create a function to perform univariate regression for each outcome variable
+run_univariate_models <- function(outcome_var_name) {
+  formulas <- explanatory_var_names %>% 
+    str_c(outcome_var_name, " ~ ", .) # Create formulas for each explanatory variable
+  
+  models <- formulas %>% 
+    map(
+      .f = ~glm( # Run glm for each formula
+        formula = as.formula(.x),
+        family = "binomial",
+        data = coinfection_data
+      )
+    ) %>% 
+    map(
+      .f = ~tidy(
+        .x,
+        exponentiate = TRUE,
+        conf.int = TRUE
+      )
+    ) %>% 
+    bind_rows() %>% 
+    mutate(across(where(is.numeric), round, digits = 2)) %>% 
+    mutate(outcome_var = outcome_var_name) # Add outcome variable name
+  
+  return(models)
+}
+
+
+# Loop over all outcome variables and run the univariate models
+univar_results <- outcome_var_names %>% 
+  map_dfr(run_univariate_models)
+
+# View the results
+print(univar_results)
+
+write.csv(univar_results, file="C:/MALHelminth project/Paper1/MALHelminth_serology/univariate_log_results.csv")
+
+
+# Multivariate regression ---------------------------------------------------------------------------------------
+
+#set multivariate regression model function including backward selection based on AIC 
+run_multiple_logistic_regression <- function(outcome_var_name) {
+  tryCatch({
+    # Construct the formula for logistic regression
+    formula <- as.formula(
+      paste(outcome_var_name, "~", paste(names(explanatory_vars), collapse = " + "))
+    )
+    
+    # Print the formula for clarity
+    print(paste("Fitting model for outcome:", outcome_var_name))
+    
+    # Fit the full logistic regression model
+    full_model <- glm(
+      formula,
+      family = "binomial",
+      data = coinfection_data
+    )
+    
+    # Perform backward selection based on AIC using MASS::stepAIC
+    selected_model <- MASS::stepAIC(full_model, direction = "backward", trace = FALSE)
+    
+    # Tidy up the results
+    result <- broom::tidy(
+      selected_model,
+      exponentiate = TRUE,   # Exponentiate to get odds ratios
+      conf.int = TRUE        # Add confidence intervals
+    ) %>% 
+      dplyr::mutate(outcome_var = outcome_var_name)  # Add outcome variable for reference
+    
+    return(result)  # Return the tidy results
+    
+  }, error = function(e) {
+    # Handle errors by printing the message and returning NULL
+    message("Error in model for outcome variable: ", outcome_var_name)
+    message("Error message: ", e$message)
+    return(NULL)
+  })
+}
+
+# Run the logistic regression models for each outcome variable and apply multiple testing correction
+
+results_list <- list()
+
+for (outcome in outcome_var_names) {
+  print(paste("Running model for outcome:", outcome))
+  result <- run_multiple_logistic_regression(outcome)
+  
+  if (!is.null(result)) {
+    results_list[[outcome]] <- result  # Add results to the list if successful
+  }
+}
+
+# Combine all the results into one data frame
+multiple_logistic_results <- bind_rows(results_list, .id = "outcome_var")
+
+# Check if any results exist
+if (nrow(multiple_logistic_results) > 0) {
+  
+  # Holm-Bonferroni correction
+  # Sort the p-values in increasing order, and apply the Holm correction
+  
+  multiple_logistic_results <- multiple_logistic_results %>%
+    dplyr::mutate(rank = rank(p.value, ties.method = "first")) %>% # Rank the p-values
+    dplyr::mutate(holm_pvalue = p.adjust(p.value, method = "holm")) # Holm-Bonferroni correction
+  
+  # Remove the rank column if needed
+  multiple_logistic_results <- dplyr::select(multiple_logistic_results, -rank)
+  
+  # Print and save the results
+  print(multiple_logistic_results)
+  write.csv(multiple_logistic_results, file = "C:/MALHelminth project/Paper1/MALHelminth_serology/multiple_log_results.csv", row.names = FALSE)
+  
+} else {
+  message("No results to save or there was an issue with the models.")
+}
